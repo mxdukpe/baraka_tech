@@ -1,0 +1,79 @@
+{
+  "compilerOptions": {
+    /* Configuration de base */
+    "target": "esnext",
+    "module": "Node16",
+    "lib": ["esnext", "dom"],
+    "jsx": "react-native",
+    "incremental": true,
+    
+    /* Configuration des imports */
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "moduleResolution": "node16",
+    "resolveJsonModule": true,
+    
+    /* Configuration du typage */
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "strictPropertyInitialization": true,
+    "noImplicitThis": true,
+    "alwaysStrict": true,
+    "forceConsistentCasingInFileNames": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "skipLibCheck": false,
+    
+    /* Configuration des chemins */
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@components/*": ["./src/components/*"],
+      "@assets/*": ["./assets/*"],
+      "@navigation/*": ["./src/navigation/*"],
+      "@utils/*": ["./src/utils/*"],
+      "@hooks/*": ["./src/hooks/*"],
+      "@services/*": ["./src/services/*"],
+      "@types/*": ["./src/types/*"]
+    },
+    
+    /* Configuration de la sortie */
+    "outDir": "./dist",
+    "removeComments": true,
+    "noEmit": true,
+    
+    /* Configuration React */
+    "jsxFactory": "React.createElement",
+    "jsxFragmentFactory": "Fragment"
+  },
+  "exclude": [
+    "node_modules",
+    "babel.config.js",
+    "metro.config.js",
+    "jest.config.js",
+    "**/*.spec.ts",
+    "**/*.test.ts",
+    "**/__tests__/**",
+    "**/__mocks__/**",
+    "android",
+    "ios",
+    "web-build"
+  ],
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.d.ts",
+    "src/**/*.tsx",
+    "App.tsx",
+    "index.js",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts",
+    "global.d.ts",
+    "**/*.d.ts"
+  ],
+  "extends": "expo/tsconfig.base"
+}

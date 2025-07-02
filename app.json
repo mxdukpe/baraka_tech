@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "baraka_technologies",
+    "slug": "baraka_technologies",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/baraka_icon.png",
+    "scheme": "barakatechnologies",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/baraka_icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "package": "com.venus2003.baraka_technologies",
+      "permissions": ["READ_EXTERNAL_STORAGE", "WRITE_EXTERNAL_STORAGE"]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/images/baraka_icon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/baraka_icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "5dafd8be-6d22-4d61-b0d8-f72b1fe504ff"
+      }
+    },
+    "owner": "venus2003"
+  }
+}

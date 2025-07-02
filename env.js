@@ -1,0 +1,1 @@
+export const IP_ADDRESS = 'https://backend.barakasn.com/api/v0/';
