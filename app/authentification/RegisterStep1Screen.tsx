@@ -8,18 +8,39 @@ import {
   SafeAreaView,
   ScrollView,
   Alert,
+  FlatList,
+  Modal,
+
   ActivityIndicator
 } from 'react-native';
 import DeviceInfo from 'react-native-device-info';
 
+import { CountryCode, Country } from '../../services/types'; // Nous allons créer ce type
+import countryData from './countryCodes.json'; // Fichier JSON avec les indicatifs
+
 type RegisterStep1ScreenProps = {
   navigation: any;
+  route: any;
 };
 
-const RegisterStep1Screen: React.FC<RegisterStep1ScreenProps> = ({ navigation }) => {
-  const [phone_number, setPhoneNumber] = useState<string>('');
+const RegisterStep1Screen: React.FC<RegisterStep1ScreenProps> = ({ navigation, route }) => {
   const [device_id, setDeviceId] = useState<string>('');
-  const [isLoading, setIsLoading] = useState(false);
+    const [phone_number, setPhoneNumber] = useState(route.params?.phone_number || '');
+    const [first_name, setFirstName] = useState(route.params?.first_name || '');
+    const [last_name, setLastName] = useState(route.params?.last_name || '');
+    const [isLoading, setIsLoading] = useState(false);
+    const [selectedCountry, setSelectedCountry] = useState<Country>({
+      code: 'CD',
+      name: 'Sénégal',
+      dial_code: '+221'
+    });
+    const [modalVisible, setModalVisible] = useState(false);
+    const [searchText, setSearchText] = useState('');
+
+  const filteredCountries = countryData.filter(country => 
+    country.name.toLowerCase().includes(searchText.toLowerCase()) || 
+    country.dial_code.includes(searchText)
+  );
 
   useEffect(() => {
     const fetchDeviceId = async () => {
@@ -34,17 +55,16 @@ const RegisterStep1Screen: React.FC<RegisterStep1ScreenProps> = ({ navigation })
     fetchDeviceId();
   }, []);
 
+  // Combiner l'indicatif et le numéro
+  const fullPhoneNumber = `${selectedCountry.dial_code}${phone_number.replace(/^0+/, '')}`;
   const handleSendPhoneNumber = async () => {
-  if (!phone_number || !/^\d{8}$/.test(phone_number)) {
-    Alert.alert('Erreur', 'Veuillez entrer un numéro valide (8 chiffres)');
-    return;
-  }
+
 
   setIsLoading(true);
 
   try {
     const payload = {
-      phone_number: `${phone_number}`,
+      phone_number: `${fullPhoneNumber}`,
       device_id,
     };
 
@@ -65,8 +85,8 @@ const RegisterStep1Screen: React.FC<RegisterStep1ScreenProps> = ({ navigation })
       
       if (responseData.detail) {
         errorMessage = responseData.detail;
-      } else if (responseData.phone_number) {
-        errorMessage = responseData.phone_number.join('\n');
+      } else if (responseData.fullPhoneNumber) {
+        errorMessage = responseData.fullPhoneNumber.join('\n');
       } else if (responseData.non_field_errors) {
         errorMessage = responseData.non_field_errors.join('\n');
       } else if (typeof responseData === 'string') {
@@ -99,6 +119,20 @@ const RegisterStep1Screen: React.FC<RegisterStep1ScreenProps> = ({ navigation })
   const handlePhoneChange = (text: string) => {
     setPhoneNumber(text.replace(/\D/g, ''));
   };
+    const renderCountryItem = ({ item }: { item: Country }) => (
+      <TouchableOpacity
+        style={styles.countryItem}
+        onPress={() => {
+          setSelectedCountry(item);
+          setModalVisible(false);
+          setSearchText('');
+        }}
+      >
+        <Text style={styles.countryName}>{item.name}</Text>
+        <Text style={styles.countryCode}>{item.dial_code}</Text>
+      </TouchableOpacity>
+    );
+  
 
   return (
     <SafeAreaView style={styles.container}>
@@ -108,15 +142,21 @@ const RegisterStep1Screen: React.FC<RegisterStep1ScreenProps> = ({ navigation })
           
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Numéro de téléphone</Text>
-            <View style={styles.phoneContainer}>
-              <Text style={styles.prefix}>+229 </Text>
+            <View style={styles.phoneInputContainer}>
+              <TouchableOpacity 
+                style={styles.countryPickerButton}
+                onPress={() => setModalVisible(true)}
+              >
+                <Text style={styles.countryPickerText}>{selectedCountry.dial_code}</Text>
+              </TouchableOpacity>
               <TextInput
-                style={styles.phoneInput}
-                placeholder="12345678"
+                style={[styles.input, styles.phoneInput]}
                 value={phone_number}
-                onChangeText={handlePhoneChange}
+                onChangeText={setPhoneNumber}
                 keyboardType="phone-pad"
-                maxLength={8}
+                autoCapitalize="none"
+                placeholderTextColor="#999"
+                placeholder="Numéro de téléphone"
               />
             </View>
           </View>
@@ -141,6 +181,41 @@ const RegisterStep1Screen: React.FC<RegisterStep1ScreenProps> = ({ navigation })
           </View>
         </View>
       </ScrollView>
+      
+            {/* Modal pour sélectionner le pays */}
+            <Modal
+              animationType="slide"
+              transparent={false}
+              visible={modalVisible}
+              onRequestClose={() => setModalVisible(false)}
+            >
+              <SafeAreaView style={styles.modalContainer}>
+                <View style={styles.searchContainer}>
+                  <TextInput
+                    style={styles.searchInput}
+                    placeholder="Rechercher un pays..."
+                    value={searchText}
+                    onChangeText={setSearchText}
+                    autoFocus={true}
+                  />
+                </View>
+                <FlatList
+                  data={filteredCountries}
+                  renderItem={renderCountryItem}
+                  keyExtractor={(item) => item.code}
+                  keyboardShouldPersistTaps="handled"
+                />
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={() => {
+                    setModalVisible(false);
+                    setSearchText('');
+                  }}
+                >
+                  <Text style={styles.closeButtonText}>Fermer</Text>
+                </TouchableOpacity>
+              </SafeAreaView>
+            </Modal>
     </SafeAreaView>
   );
 };
@@ -198,6 +273,73 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 15,
     fontSize: 16,
+  },
+  phoneInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    padding: 15,
+    borderRadius: 12,
+    fontSize: 16,
+    backgroundColor: '#f8f8f8',
+  },
+  
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  searchContainer: {
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ddd',
+  },
+  searchInput: {
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    fontSize: 16,
+  },
+  countryItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  countryName: {
+    fontSize: 16,
+    color: '#333',
+  },
+  countryCode: {
+    fontSize: 16,
+    color: '#666',
+  },
+  closeButton: {
+    padding: 15,
+    backgroundColor: '#F58320',
+    alignItems: 'center',
+  },
+  closeButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  countryPickerButton: {
+    padding: 15,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 12,
+    marginRight: 10,
+    backgroundColor: '#f8f8f8',
+    justifyContent: 'center',
+  },
+  countryPickerText: {
+    fontSize: 16,
+    color: '#333',
   },
   continueButton: {
     backgroundColor: '#F58320',

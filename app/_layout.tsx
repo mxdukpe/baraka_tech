@@ -42,6 +42,8 @@ import ProductListScreen from './screens/ProductListScreen';
 import BulkUploadScreen from './screens/BulkUploadScreen';
 import OrderStatusScreen from './screens/OrderStatusScreen';
 import AdminDashboard from './dashboard/AdminDashboard';
+import CategoryProductsScreen from './screens/CategoryProductsScreen';
+import PaiementValidationScreen from './screens/PaiementValidationScreen';
 
 import { RootStackParamList } from '../services/types'; // Assurez-vous d'avoir défini RootStackParamList
 
@@ -57,7 +59,7 @@ const Tab = createBottomTabNavigator();
 /**
  * Type pour les noms d'icônes valides.
  */
-type IconName = 'home' | 'home-outline' | 'call' |  'call-outline' | 'tv' |  'tv-outline' | 'notifications' | 'notifications-outline' | 'flag-outline' | 'notifications' | 'notifications-outline' | 'search' | 'search-outline' | 'stats-chart' | 'stats-chart-outline' | 'person' | 'person-outline' | 'help-circle' | 'help-circle-outline';
+type IconName = 'home' | 'home-outline' | 'call' |  'call-outline' | 'tv' |  'tv-outline' | 'notifications' | 'notifications-outline' | 'flag-outline' | 'notifications' | 'notifications-outline' | 'search' | 'search-outline' | 'stats-chart' | 'stats-chart-outline' | 'person' | 'person-outline' | 'receipt' | 'receipt-outline';
 
 /**
  * Composant pour la navigation par onglets.
@@ -78,7 +80,7 @@ function HomeTabs() {
             } else if (route.name === 'CategoriesTab') {
               iconName = focused ? 'tv' : 'tv-outline'; // Utilisez 'flag' pour les objectifs
             }else if (route.name === 'NotificationsTab') {
-              iconName = focused ? 'help-circle' : 'help-circle-outline'; // Utilisez 'flag' pour les objectifs
+              iconName = focused ? 'receipt' : 'receipt-outline'; // Utilisez 'flag' pour les objectifs
             } else if (route.name === 'ScanTab') {
               iconName = focused ? 'search' : 'search-outline';
             } else if (route.name === 'ContactScreen') {
@@ -109,12 +111,12 @@ function HomeTabs() {
         <Tab.Screen
           name="CategoriesTab"
           component={CategorieScreen}
-          options={{ tabBarLabel: 'Catalogue', headerShown: false }}
+          options={{ tabBarLabel: 'Catégories', headerShown: false }}
         />
         <Tab.Screen
           name="NotificationsTab"
-          component={AppUsageGuideScreen}
-          options={{ tabBarLabel: 'Guide', headerShown: false }}
+          component={CatalogueScreen}
+          options={{ tabBarLabel: 'Catalogue', headerShown: false }}
         />
         <Tab.Screen
           name="ScanTab"
@@ -198,6 +200,9 @@ export default function RootLayout() {
         <Stack.Screen name="ProductListScreen" component={ProductListScreen} options={{ headerShown: false }}/>
         <Stack.Screen name="BulkUploadScreen" component={BulkUploadScreen} options={{ headerShown: false }}/>
         <Stack.Screen name="AdminDashboard" component={AdminDashboard} options={{ headerShown: false }}/>
+        <Stack.Screen name="NotificationsScreen" component={NotificationsScreen} options={{ headerShown: false }}/>
+        <Stack.Screen name="CategoryProductsScreen" component={CategoryProductsScreen} options={{ headerShown: false }}/>
+        <Stack.Screen name="PaiementValidation" component={PaiementValidationScreen} options={{ title: 'Validation Paiement' }}/>
       </Stack.Navigator>
     </ThemeProvider>
   );

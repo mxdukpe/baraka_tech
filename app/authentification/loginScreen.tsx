@@ -10,10 +10,14 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
-    View
+    View,
+    Modal,
+    FlatList,
+    Platform
 } from 'react-native';
-import DeviceInfo from 'react-native-device-info'; // Importez la bibliothèque
-
+import DeviceInfo from 'react-native-device-info';
+import { CountryCode, Country } from '../../services/types'; // Nous allons créer ce type
+import countryData from './countryCodes.json'; // Fichier JSON avec les indicatifs
 
 const { width } = Dimensions.get('window');
 
@@ -23,17 +27,23 @@ type LoginScreenProps = {
 };
 
 const LoginScreen: React.FC<LoginScreenProps> = ({ navigation, route }) => {
-  const [device_id, setDeviceId] = useState<string>(''); // Stockez le Device ID ici
-  const [phone_number, setPhoneNumber] = useState(route.params?.phone_number || ''); // Ajouter un état pour le numéro de téléphone
+  const [device_id, setDeviceId] = useState<string>('');
+  const [phone_number, setPhoneNumber] = useState(route.params?.phone_number || '');
   const [first_name, setFirstName] = useState(route.params?.first_name || '');
   const [last_name, setLastName] = useState(route.params?.last_name || '');
-  const [isLoading, setIsLoading] = useState(false); // Pour gérer l'état de chargement
-  
-  // Obtenez le Device ID au montage du composant
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectedCountry, setSelectedCountry] = useState<Country>({
+    code: 'BN',
+    name: 'Bénin',
+    dial_code: '+229'
+  });
+  const [modalVisible, setModalVisible] = useState(false);
+  const [searchText, setSearchText] = useState('');
+
   useEffect(() => {
     const fetchDeviceId = async () => {
       try {
-        const id = await DeviceInfo.getUniqueId(); // Obtenez l'ID unique de l'appareil
+        const id = await DeviceInfo.getUniqueId();
         setDeviceId(id);
       } catch (error) {
         console.error('Erreur lors de la récupération du device_id:', error);
@@ -43,67 +53,84 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation, route }) => {
     
     fetchDeviceId();
   }, []);
-  // console.log('Paramètres reçus:', { phone_number, device_id });
 
   const handleLogin = async () => {
-  if (!phone_number) {
-    Alert.alert('Erreur', 'Veuillez entrer votre numéro de téléphone');
-    return;
-  }
+    if (!phone_number) {
+      Alert.alert('Erreur', 'Veuillez entrer votre numéro de téléphone');
+      return;
+    }
 
-  setIsLoading(true);
+    // Combiner l'indicatif et le numéro
+    const fullPhoneNumber = `${selectedCountry.dial_code}${phone_number.replace(/^0+/, '')}`;
 
-  try {
-    const requestBody = {
-      first_name: first_name,
-      last_name: last_name,
-      phone_number: phone_number,
-      device_id: device_id
-    };
+    setIsLoading(true);
 
-    const response = await fetch('https://backend.barakasn.com/api/v0/merchants/login/', {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestBody),
-    });
+    try {
+      const requestBody = {
+        first_name: first_name,
+        last_name: last_name,
+        phone_number: fullPhoneNumber,
+        device_id: device_id
+      };
 
-    // Gestion plus robuste de la réponse
-    const responseData = await response.json().catch(() => ({})); // En cas d'échec du parse JSON
+      const response = await fetch('https://backend.barakasn.com/api/v0/merchants/login/', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
 
-    if (!response.ok) {
-      // Essayer d'extraire le message d'erreur de différentes manières
-      const errorMessage = 
-        responseData.detail || 
-        responseData.message || 
-        responseData.error || 
-        Object.values(responseData).join('\n') || 
-        `Erreur ${response.status}: ${response.statusText}`;
+      const responseData = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        const errorMessage = 
+          responseData.detail || 
+          responseData.message || 
+          responseData.error || 
+          Object.values(responseData).join('\n') || 
+          `Erreur ${response.status}: ${response.statusText}`;
+        
+        throw new Error(errorMessage);
+      }
+
+      if (responseData.access) {
+        await AsyncStorage.setItem('access_token', responseData.access);
+        navigation.navigate('HomeStack');
+      } else {
+        throw new Error('Token d\'accès non reçu dans la réponse');
+      }
       
-      throw new Error(errorMessage);
+    } catch (error) {
+      console.error('Erreur lors de la connexion:', error);
+      Alert.alert(
+        'Erreur', 
+        error instanceof Error ? error.message : 'Une erreur inconnue s\'est produite'
+      );
+    } finally {
+      setIsLoading(false);
     }
+  };
 
-    if (responseData.access) {
-      await AsyncStorage.setItem('access_token', responseData.access);
-      navigation.navigate('HomeStack');
-    } else {
-      throw new Error('Token d\'accès non reçu dans la réponse');
-    }
-    
-  } catch (error) {
-    console.error('Erreur lors de la connexion:', error);
-    Alert.alert(
-      'Erreur', 
-      error instanceof Error ? error.message : 'Une erreur inconnue s\'est produite'
-    );
-  } finally {
-    setIsLoading(false);
-  }
-};
-  
-  
+  const filteredCountries = countryData.filter(country => 
+    country.name.toLowerCase().includes(searchText.toLowerCase()) || 
+    country.dial_code.includes(searchText)
+  );
+
+  const renderCountryItem = ({ item }: { item: Country }) => (
+    <TouchableOpacity
+      style={styles.countryItem}
+      onPress={() => {
+        setSelectedCountry(item);
+        setModalVisible(false);
+        setSearchText('');
+      }}
+    >
+      <Text style={styles.countryName}>{item.name}</Text>
+      <Text style={styles.countryCode}>{item.dial_code}</Text>
+    </TouchableOpacity>
+  );
 
   return (
     <SafeAreaView style={[styles.container]}>
@@ -121,15 +148,23 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation, route }) => {
 
         <View style={styles.inputContainer}>
           <Text style={styles.label}>Numéro de téléphone</Text>
-          <TextInput
-            style={styles.input}
-            value={phone_number}
-            onChangeText={setPhoneNumber}
-            // onChangeText={setPhoneNumber}
-            keyboardType="phone-pad" // Utiliser le clavier numérique
-            autoCapitalize="none"
-            placeholderTextColor="#999"
-          />
+          <View style={styles.phoneInputContainer}>
+            <TouchableOpacity 
+              style={styles.countryPickerButton}
+              onPress={() => setModalVisible(true)}
+            >
+              <Text style={styles.countryPickerText}>{selectedCountry.dial_code}</Text>
+            </TouchableOpacity>
+            <TextInput
+              style={[styles.input, styles.phoneInput]}
+              value={phone_number}
+              onChangeText={setPhoneNumber}
+              keyboardType="phone-pad"
+              autoCapitalize="none"
+              placeholderTextColor="#999"
+              placeholder="Numéro de téléphone"
+            />
+          </View>
         </View>
 
         <TouchableOpacity 
@@ -143,10 +178,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation, route }) => {
           style={styles.loginButton}
           onPress={handleLogin}
           activeOpacity={0.8}
-          disabled={isLoading} // Désactiver le bouton pendant le chargement
+          disabled={isLoading}
         >
           {isLoading ? (
-            <ActivityIndicator color="#fff" /> // Afficher un indicateur de chargement
+            <ActivityIndicator color="#fff" />
           ) : (
             <Text style={styles.loginButtonText}>Se connecter</Text>
           )}
@@ -159,6 +194,41 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation, route }) => {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Modal pour sélectionner le pays */}
+      <Modal
+        animationType="slide"
+        transparent={false}
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.searchContainer}>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Rechercher un pays..."
+              value={searchText}
+              onChangeText={setSearchText}
+              autoFocus={true}
+            />
+          </View>
+          <FlatList
+            data={filteredCountries}
+            renderItem={renderCountryItem}
+            keyExtractor={(item) => item.code}
+            keyboardShouldPersistTaps="handled"
+          />
+          <TouchableOpacity
+            style={styles.closeButton}
+            onPress={() => {
+              setModalVisible(false);
+              setSearchText('');
+            }}
+          >
+            <Text style={styles.closeButtonText}>Fermer</Text>
+          </TouchableOpacity>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -199,6 +269,26 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 8,
     fontWeight: '500',
+  },
+  phoneInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  countryPickerButton: {
+    padding: 15,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 12,
+    marginRight: 10,
+    backgroundColor: '#f8f8f8',
+    justifyContent: 'center',
+  },
+  countryPickerText: {
+    fontSize: 16,
+    color: '#333',
+  },
+  phoneInput: {
+    flex: 1,
   },
   input: {
     borderWidth: 1,
@@ -248,6 +338,47 @@ const styles = StyleSheet.create({
   registerLink: {
     color: '#F58320',
     fontSize: 14,
+    fontWeight: 'bold',
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  searchContainer: {
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ddd',
+  },
+  searchInput: {
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    fontSize: 16,
+  },
+  countryItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  countryName: {
+    fontSize: 16,
+    color: '#333',
+  },
+  countryCode: {
+    fontSize: 16,
+    color: '#666',
+  },
+  closeButton: {
+    padding: 15,
+    backgroundColor: '#F58320',
+    alignItems: 'center',
+  },
+  closeButtonText: {
+    color: '#fff',
+    fontSize: 16,
     fontWeight: 'bold',
   },
 });

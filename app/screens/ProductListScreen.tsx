@@ -4,10 +4,10 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity,
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../appearence/ThemeContext';
 import { lightTheme, darkTheme } from '../styles/theme';
-import { getProducts } from '../../services/apiService';
+import { getProducts, getProductsPage } from '../../services/apiService';
 import { Product } from '../../services/types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { captureRef } from 'react-native-view-shot';
+// import { captureRef } from 'react-native-view-shot';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
@@ -17,13 +17,15 @@ type ProductListScreenProps = {
 };
 
 const ProductListScreen: React.FC<ProductListScreenProps> = ({ navigation }) => {
-  const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [token, setToken] = useState<string | null>(null);
   const viewRef = useRef(null);
 
+  // Supprimez les variables inutilisées et gardez seulement allProducts
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [loadingError, setLoadingError] = useState<string | null>(null);
   const { isDarkMode } = useTheme();
   const theme = isDarkMode ? darkTheme : lightTheme;
 
@@ -36,23 +38,66 @@ const ProductListScreen: React.FC<ProductListScreenProps> = ({ navigation }) => 
   }, []);
 
   useEffect(() => {
-    const fetchProducts = async () => {
-      if (!token) return;
+    const fetchAllProducts = async () => {
+      console.log('Début du chargement des produits');
+      if (!token) {
+        console.log('Token non disponible');
+        return;
+      }
 
       try {
-        const data = await getProducts(token);
-        setProducts(data);
-        setIsLoading(false);
+        setIsLoading(true);
+        setLoadingError(null);
+        
+        let currentPage = 1;
+        let hasMore = true;
+        const products: Product[] = [];
+        console.log('Initialisation chargement');
+
+        while (hasMore) {
+          try {
+            // console.log(`Chargement page ${currentPage}`);
+            const response = await getProductsPage(token, currentPage);
+            // console.log('Réponse API:', response);
+            
+            if (!response.results || response.results.length === 0) {
+              console.warn('Page vide reçue');
+              break;
+            }
+
+            products.push(...response.results);
+            hasMore = response.next !== null;
+            currentPage++;
+
+            // console.log(`${products.length} produits chargés`);
+          } catch (error) {
+            console.error(`Erreur page ${currentPage}:`, error);
+            hasMore = false;
+            throw error;
+          }
+        }
+
+        console.log('Total produits chargés:', products.length);
+        setAllProducts(products);
+        
+        // Vérifiez si les produits ont bien des prix
+        console.log('Premier produit:', products[0]);
+        
       } catch (error) {
-        setError('Erreur lors du chargement des produits');
+        console.error('Erreur globale:', error);
+        setLoadingError('Échec du chargement des produits');
+        setError('Échec du chargement des produits');
+      } finally {
+        console.log('Chargement terminé');
         setIsLoading(false);
       }
     };
 
-    fetchProducts();
+    fetchAllProducts();
   }, [token]);
 
-  const filteredProducts = products.filter(product => 
+  // Correction : filtrer allProducts au lieu de products
+  const filteredProducts = allProducts.filter(product => 
     product.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -61,98 +106,110 @@ const ProductListScreen: React.FC<ProductListScreenProps> = ({ navigation }) => 
   };
 
   const generatePDF = async () => {
-  try {
-    setIsLoading(true); // Afficher un indicateur de chargement
-    
-    // Vérifier s'il y a des produits à exporter
-    if (filteredProducts.length === 0) {
-      Alert.alert('Aucun produit', 'Aucun produit à exporter en PDF');
-      return;
-    }
-
-    const html = `
-      <html>
-        <head>
-          <style>
-            body { font-family: Arial; margin: 20px; }
-            h1 { color: #F58320; text-align: center; margin-bottom: 20px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th { background-color: #F58320; color: white; padding: 12px; text-align: left; }
-            td { padding: 10px; border-bottom: 1px solid #ddd; }
-            tr:nth-child(even) { background-color: #f9f9f9; }
-            .footer { margin-top: 30px; text-align: center; font-size: 12px; color: #777; }
-          </style>
-        </head>
-        <body>
-          <h1>Liste des Produits</h1>
-          <div>Date d'export: ${new Date().toLocaleDateString('fr-FR')}</div>
-          <div>Nombre de produits: ${filteredProducts.length}</div>
-          
-          <table>
-            <tr>
-              <th>Nom</th>
-              <th>Prix (FCFA)</th>
-            </tr>
-            ${filteredProducts.map(product => `
-              <tr>
-                <td>${product.name}</td>
-                <td>${formatPrice(product.prices[0]?.price)}</td>
-              </tr>
-            `).join('')}
-          </table>
-          
-          <div class="footer">
-            Généré par MyApp - ${new Date().getFullYear()}
-          </div>
-        </body>
-      </html>
-    `;
-
-    // Options d'impression
-    const { uri } = await Print.printToFileAsync({ 
-      html,
-      width: 842,  // A4 width in pixels (72dpi)
-      height: 595, // A4 height
-      base64: false
-    });
-
-    // Option 1: Proposer le partage
-    if (await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync(uri, {
-        mimeType: 'application/pdf',
-        dialogTitle: 'Exporter les produits',
-        UTI: 'com.adobe.pdf'
-      });
-    } 
-    // Option 2: Sauvegarder localement si le partage n'est pas disponible
-    else {
-      const pdfName = `Produits_${new Date().toISOString().slice(0,10)}.pdf`;
-      const newUri = `${FileSystem.documentDirectory}${pdfName}`;
+    try {
+      setIsLoading(true);
       
-      await FileSystem.copyAsync({ from: uri, to: newUri });
+      // Utilisez filteredProducts pour respecter la recherche
+      const productsToExport = searchQuery ? filteredProducts : allProducts;
+      
+      console.log('Produits à exporter:', productsToExport.length);
+      
+      if (productsToExport.length === 0) {
+        Alert.alert('Aucun produit', 'Aucun produit à exporter en PDF');
+        return;
+      }
+
+      const html = `
+        <html>
+          <head>
+            <style>
+              body { font-family: Arial; margin: 20px; }
+              h1 { color: #F58320; text-align: center; margin-bottom: 20px; }
+              table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+              th { background-color: #F58320; color: white; padding: 12px; text-align: left; }
+              td { padding: 10px; border-bottom: 1px solid #ddd; }
+              tr:nth-child(even) { background-color: #f9f9f9; }
+              .footer { margin-top: 30px; text-align: center; font-size: 12px; color: #777; }
+            </style>
+          </head>
+          <body>
+            <h1>Liste des Produits</h1>
+            <div>Date d'export: ${new Date().toLocaleDateString('fr-FR')}</div>
+            <div>Nombre de produits: ${productsToExport.length}</div>
+            
+            <table>
+              <tr>
+                <th>Nom</th>
+                <th>Prix (FCFA)</th>
+              </tr>
+              ${productsToExport.map(product => {
+                // Vérification de sécurité pour les prix
+                const price = product.prices && product.prices.length > 0 
+                  ? product.prices[0].price 
+                  : '0';
+                
+                return `
+                  <tr>
+                    <td>${product.name || 'Nom non disponible'}</td>
+                    <td>${formatPrice(price)}</td>
+                  </tr>
+                `;
+              }).join('')}
+            </table>
+            
+            <div class="footer">
+              Généré par BARAKA - ${new Date().getFullYear()}
+            </div>
+          </body>
+        </html>
+      `;
+
+      console.log('HTML généré, longueur:', html.length);
+
+      const { uri } = await Print.printToFileAsync({ 
+        html,
+        width: 842,
+        height: 595,
+        base64: false
+      });
+
+      console.log('PDF généré à:', uri);
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/pdf',
+          dialogTitle: 'Exporter les produits',
+          UTI: 'com.adobe.pdf'
+        });
+      } else {
+        const pdfName = `Produits_${new Date().toISOString().slice(0,10)}.pdf`;
+        const newUri = `${FileSystem.documentDirectory}${pdfName}`;
+        
+        await FileSystem.copyAsync({ from: uri, to: newUri });
+        Alert.alert(
+          'PDF sauvegardé', 
+          `Le fichier a été enregistré dans vos documents.`
+        );
+      }
+      
+    } catch (error) {
+      console.error('Erreur PDF:', error);
       Alert.alert(
-        'PDF sauvegardé', 
-        `Le fichier a été enregistré dans vos documents.`,
-        [{ text: 'OK', onPress: () => console.log('OK Pressed') }]
+        'Erreur', 
+        'Une erreur est survenue lors de la génération du PDF'
       );
+    } finally {
+      setIsLoading(false);
     }
-    
-  } catch (error) {
-    console.error('Erreur PDF:', error);
-    Alert.alert(
-      'Erreur', 
-      'Une erreur est survenue lors de la génération du PDF',
-      [{ text: 'OK', onPress: () => console.log('OK Pressed') }]
-    );
-  } finally {
-    setIsLoading(false);
-  }
-};
+  };
 
   if (isLoading) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: theme.background }]}>
         <ActivityIndicator size="large" color="#F58320" />
+        <Text style={[styles.loadingText, { color: theme.text }]}>
+          Chargement des produits...
+        </Text>
       </View>
     );
   }
@@ -186,8 +243,6 @@ const ProductListScreen: React.FC<ProductListScreenProps> = ({ navigation }) => 
         </TouchableOpacity>
       </View>
 
-      
-
       <TextInput
         style={[
           styles.searchInput, 
@@ -204,15 +259,11 @@ const ProductListScreen: React.FC<ProductListScreenProps> = ({ navigation }) => 
       />
 
       <View ref={viewRef} style={styles.tableContainer}>
-        {/* En-tête du tableau */}
         <View style={[styles.tableHeader, { backgroundColor: theme.header.background }]}>
           <Text style={[styles.headerCell, styles.nameCell, { color: theme.header.text }]}>Nom</Text>
-          {/* <Text style={[styles.headerCell, styles.categoryCell, { color: theme.header.text }]}>Catégorie</Text> */}
-          <Text style={[styles.headerCell, styles.priceCell, { color: theme.header.text }]}>Prix (FCFA)</Text>
-          {/* <Text style={[styles.headerCell, styles.descCell, { color: theme.header.text }]}>Description</Text> */}
+          <Text style={[styles.headerCell, styles.priceCell, { color: theme.header.text }]}>Prix</Text>
         </View>
 
-        {/* Corps du tableau */}
         <ScrollView>
           {filteredProducts.map((product) => (
             <View 
@@ -222,15 +273,12 @@ const ProductListScreen: React.FC<ProductListScreenProps> = ({ navigation }) => 
               <Text style={[styles.cell, styles.nameCell, { color: theme.text }]} numberOfLines={2}>
                 {product.name}
               </Text>
-              {/* <Text style={[styles.cell, styles.categoryCell, { color: theme.text }]}>
-                {product.category.name}
-              </Text> */}
               <Text style={[styles.cell, styles.priceCell, { color: '#F58320' }]}>
-                {formatPrice(product.prices[0]?.price)}
+                {product.prices && product.prices.length > 0 
+                  ? formatPrice(product.prices[0].price) 
+                  : 'N/A'
+                } FCFA
               </Text>
-              {/* <Text style={[styles.cell, styles.descCell, { color: theme.text }]} numberOfLines={2}>
-                {product.description || 'N/A'}
-              </Text> */}
             </View>
           ))}
         </ScrollView>
@@ -264,27 +312,29 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingVertical: 50,
   },
-
   exportButton: {
-  flexDirection: 'row',
-  backgroundColor: '#F58320',
-  paddingVertical: 10,
-  paddingHorizontal: 15,
-  borderRadius: 8,
-  alignItems: 'center',
-  justifyContent: 'center',
-  marginLeft: 10,
-},
-exportButtonText: {
-  color: 'white',
-  marginLeft: 8,
-  fontWeight: 'bold',
-},
-
+    flexDirection: 'row',
+    backgroundColor: '#F58320',
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 10,
+  },
+  exportButtonText: {
+    color: 'white',
+    marginLeft: 8,
+    fontWeight: 'bold',
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
   },
   errorContainer: {
     flex: 1,
@@ -354,15 +404,9 @@ exportButtonText: {
   nameCell: {
     flex: 2,
   },
-  categoryCell: {
-    flex: 1,
-  },
   priceCell: {
     flex: 1,
     textAlign: 'right',
-  },
-  descCell: {
-    flex: 2,
   },
   resultsCount: {
     fontSize: 14,

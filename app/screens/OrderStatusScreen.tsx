@@ -9,7 +9,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { getProducts } from '../../services/apiService';
 import { Product } from '../../services/types';
-import { captureRef } from 'react-native-view-shot';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
@@ -17,8 +16,10 @@ import * as FileSystem from 'expo-file-system';
 
 type OrderItem = {
   product: {
+    id: number;
     name: string;
     image?: string;
+    price?: string;
   };
   quantity: number;
   unit_price: string;
@@ -50,9 +51,7 @@ const OrderStatusScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const filteredProducts = products.filter(product => 
     product.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
-
-  
-    const viewRef = useRef(null);
+  const viewRef = useRef(null);
 
 
   useEffect(() => {
@@ -128,14 +127,14 @@ const OrderStatusScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         };
       case 'processing':
         return {
-          text: 'En cours',
+          text: 'Validées',
           icon: 'sync',
           color: '#2196F3',
           bgColor: '#E3F2FD'
         };
       case 'completed':
         return {
-          text: 'Terminée',
+          text: 'Livrées',
           icon: 'check-circle',
           color: '#4CAF50',
           bgColor: '#E8F5E9'
@@ -166,183 +165,202 @@ const OrderStatusScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   };
 
   
-  const formatPrice = (price: string) => {
-    return parseInt(price).toLocaleString('fr-FR');
+  const formatPrice = (price: string | number) => {
+    const num = typeof price === 'string' ? parseFloat(price) : price;
+    return new Intl.NumberFormat('fr-FR', {
+      style: 'currency',
+      currency: 'XOF',
+      currencyDisplay: 'narrowSymbol'
+    }).format(num).replace('CFA', 'FCFA');
   };
 
+  // Utilisation :
+  // <Text style={[styles.itemPrice, { color: theme.text }]}>
+  //   {formatPrice(orderItem.unit_price)}
+  // </Text>
+
   const generatePDF = async () => {
-  try {
-    setIsLoading(true);
-    
-    // Vérifier s'il y a des commandes sélectionnées
-    if (selectedOrders.length === 0) {
-      Alert.alert('Aucune commande', 'Veuillez sélectionner au moins une commande à exporter');
-      return;
-    }
+    try {
+      setIsLoading(true);
+      
+      // Vérifier s'il y a des commandes sélectionnées
+      if (selectedOrders.length === 0) {
+        Alert.alert('Aucune commande', 'Veuillez sélectionner au moins une commande à exporter');
+        return;
+      }
 
-    // Récupérer les commandes sélectionnées
-    const selectedOrdersData = orders.filter(order => 
-      selectedOrders.includes(order.id)
-    );
+      // Récupérer les commandes sélectionnées
+      const selectedOrdersData = orders.filter(order => 
+        selectedOrders.includes(order.id)
+      );
 
-    const html = `
-      <html>
-        <head>
-          <style>
-            body { font-family: Arial; margin: 20px; }
-            h1 { color: #F58320; text-align: center; margin-bottom: 20px; }
-            h2 { color: #333; margin-top: 30px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th { background-color: #F58320; color: white; padding: 12px; text-align: left; }
-            td { padding: 10px; border-bottom: 1px solid #ddd; }
-            tr:nth-child(even) { background-color: #f9f9f9; }
-            .order-header { background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 15px; }
-            .order-info { display: flex; justify-content: space-between; margin-bottom: 10px; }
-            .footer { margin-top: 30px; text-align: center; font-size: 12px; color: #777; }
-            .total { font-weight: bold; text-align: right; margin-top: 10px; }
-          </style>
-        </head>
-        <body>
-          <h1>Récapitulatif des Commandes</h1>
-          <div>Date d'export: ${new Date().toLocaleDateString('fr-FR')}</div>
-          <div>Nombre de commandes: ${selectedOrders.length}</div>
-          
-          ${selectedOrdersData.map(order => {
-            const statusDetails = getStatusDetails(order.status);
-            return `
-              <div style="margin-top: 40px;">
-                <div class="order-header">
-                  <h2>Commande #${order.id}</h2>
-                  <div class="order-info">
-                    <div>
-                      <strong>Date:</strong> ${new Date(order.created_at).toLocaleDateString('fr-FR', {
-                        day: 'numeric',
-                        month: 'long',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </div>
-                    <div>
-                      <strong>Statut:</strong> ${statusDetails.text}
+      const html = `
+        <html>
+          <head>
+            <style>
+              body { font-family: Arial; margin: 20px; }
+              h1 { color: #F58320; text-align: center; margin-bottom: 20px; }
+              h2 { color: #333; margin-top: 30px; }
+              table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+              th { background-color: #F58320; color: white; padding: 12px; text-align: left; }
+              td { padding: 10px; border-bottom: 1px solid #ddd; }
+              tr:nth-child(even) { background-color: #f9f9f9; }
+              .order-header { background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 15px; }
+              .order-info { display: flex; justify-content: space-between; margin-bottom: 10px; }
+              .footer { margin-top: 30px; text-align: center; font-size: 12px; color: #777; }
+              .total { font-weight: bold; text-align: right; margin-top: 10px; }
+            </style>
+          </head>
+          <body>
+            <h1>Récapitulatif des Commandes</h1>
+            <div>Date d'export: ${new Date().toLocaleDateString('fr-FR')}</div>
+            <div>Nombre de commandes: ${selectedOrders.length}</div>
+            
+            ${selectedOrdersData.map(order => {
+              const statusDetails = getStatusDetails(order.status);
+              return `
+                <div style="margin-top: 40px;">
+                  <div class="order-header">
+                    <h2>Commande #${order.id}</h2>
+                    <div class="order-info">
+                      <div>
+                        <strong>Date:</strong> ${new Date(order.created_at).toLocaleDateString('fr-FR', {
+                          day: 'numeric',
+                          month: 'long',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </div>
+                      <div>
+                        <strong>Statut:</strong> ${statusDetails.text}
+                      </div>
                     </div>
                   </div>
-                </div>
-                
-                <table>
-                  <tr>
-                    <th>Produit</th>
-                    <th>Quantité</th>
-                    <th>Prix unitaire</th>
-                    <th>Total</th>
-                  </tr>
-                  ${order.items.map(item => `
+                  
+                  <table>
                     <tr>
-                      <td>${item.product.name}</td>
-                      <td>${item.quantity}</td>
-                      <td>${formatPrice(item.unit_price)} FCFA</td>
-                      <td>${formatPrice((parseFloat(item.unit_price) * item.quantity).toString())} FCFA</td>
+                      <th>Produit</th>
+                      <th>Quantité</th>
+                      <th>Prix unitaire</th>
+                      <th>Total</th>
                     </tr>
-                  `).join('')}
-                </table>
-                
-                <div class="total">
-                  Total commande: ${formatPrice(order.total_price)} FCFA
+                    ${order.items.map(item => `
+                      <tr>
+                        <td>${item.product.name}</td>
+                        <td>${item.quantity}</td>
+                        <td>${formatPrice(item.unit_price)} FCFA</td>
+                        <td>${formatPrice((parseFloat(item.unit_price) * item.quantity).toString())} FCFA</td>
+                      </tr>
+                    `).join('')}
+                  </table>
+                  
+                  <div class="total">
+                    Total commande: ${formatPrice(order.total_price)} FCFA
+                  </div>
                 </div>
-              </div>
-            `;
-          }).join('')}
-          
-          <div class="footer">
-            Généré par MyApp - ${new Date().getFullYear()}
-          </div>
-        </body>
-      </html>
-    `;
+              `;
+            }).join('')}
+            
+            <div class="footer">
+              Généré par MyApp - ${new Date().getFullYear()}
+            </div>
+          </body>
+        </html>
+      `;
 
-    // Options d'impression
-    const { uri } = await Print.printToFileAsync({ 
-      html,
-      width: 842,  // A4 width in pixels (72dpi)
-      height: 595, // A4 height
-      base64: false
-    });
-
-    // Option 1: Proposer le partage
-    if (await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync(uri, {
-        mimeType: 'application/pdf',
-        dialogTitle: 'Exporter les commandes',
-        UTI: 'com.adobe.pdf'
+      // Options d'impression
+      const { uri } = await Print.printToFileAsync({ 
+        html,
+        width: 842,  // A4 width in pixels (72dpi)
+        height: 595, // A4 height
+        base64: false
       });
-    } 
-    // Option 2: Sauvegarder localement si le partage n'est pas disponible
-    else {
-      const pdfName = `Commandes_${new Date().toISOString().slice(0,10)}.pdf`;
-      const newUri = `${FileSystem.documentDirectory}${pdfName}`;
+
+      // Option 1: Proposer le partage
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/pdf',
+          dialogTitle: 'Exporter les commandes',
+          UTI: 'com.adobe.pdf'
+        });
+      } 
+      // Option 2: Sauvegarder localement si le partage n'est pas disponible
+      else {
+        const pdfName = `Commandes_${new Date().toISOString().slice(0,10)}.pdf`;
+        const newUri = `${FileSystem.documentDirectory}${pdfName}`;
+        
+        await FileSystem.copyAsync({ from: uri, to: newUri });
+        Alert.alert(
+          'PDF sauvegardé', 
+          `Le fichier a été enregistré dans vos documents.`,
+          [{ text: 'OK', onPress: () => console.log('OK Pressed') }]
+        );
+      }
       
-      await FileSystem.copyAsync({ from: uri, to: newUri });
+    } catch (error) {
+      console.error('Erreur PDF:', error);
       Alert.alert(
-        'PDF sauvegardé', 
-        `Le fichier a été enregistré dans vos documents.`,
+        'Erreur', 
+        'Une erreur est survenue lors de la génération du PDF',
         [{ text: 'OK', onPress: () => console.log('OK Pressed') }]
       );
+    } finally {
+      setIsLoading(false);
     }
-    
-  } catch (error) {
-    console.error('Erreur PDF:', error);
-    Alert.alert(
-      'Erreur', 
-      'Une erreur est survenue lors de la génération du PDF',
-      [{ text: 'OK', onPress: () => console.log('OK Pressed') }]
-    );
-  } finally {
-    setIsLoading(false);
+  };
+
+  const getFullImageUrl = (imagePath?: string) => {
+  if (!imagePath) return null;
+  
+  if (imagePath.startsWith('http')) {
+    return imagePath;
   }
+  
+  // Si le chemin commence par /media/, utilisez-le tel quel
+  if (imagePath.startsWith('/media/')) {
+    return `https://backend.barakasn.com${imagePath}`;
+  }
+  
+  // Sinon, ajoutez /media/ devant
+  return `https://backend.barakasn.com/media/${imagePath}`;
+};
+
+const updateOrderStatus = (orderId: string) => {
+  setOrders(prevOrders => 
+    prevOrders.map(order => 
+      order.id === orderId 
+        ? { ...order, status: 'processing' } 
+        : order
+    )
+  );
+};
+
+// Modifiez la fonction proceedToPayment
+const proceedToPayment = (orderId: string) => {
+  navigation.navigate('PaiementValidation', { 
+    orderId,
+    onPaymentSuccess: () => updateOrderStatus(orderId)
+  });
 };
   
-
-  // const shareOrdersAsImage = async () => {
-  //   if (selectedOrders.length === 0) {
-  //     Alert.alert('Aucune commande sélectionnée', 'Veuillez sélectionner au moins une commande à partager.');
-  //     return;
-  //   }
-
-  //   try {
-  //     if (!viewShotRef.current?.capture) {
-  //       throw new Error('La fonction de capture est indisponible');
-  //     }
-
-  //     const uri = await viewShotRef.current.capture();
-      
-  //     await Share.share({
-  //       title: 'Mes commandes',
-  //       message: 'Voici mes commandes sélectionnées',
-  //       url: uri,
-  //     });
-  //   } catch (error) {
-  //     console.error('Erreur lors du partage:', error);
-  //     Alert.alert('Erreur', 'Impossible de partager les commandes');
-  //   }
-  // };
-
   const renderOrderItem = ({ item }: { item: Order }) => {
-    const statusDetails = getStatusDetails(item.status);
-    const isSelected = selectedOrders.includes(item.id);
-        
-    return (
-      <TouchableOpacity 
-        style={[
-          styles.orderCard, 
-          { 
-            backgroundColor: theme.background,
-            borderColor: isSelected ? '#F58320' : '#F0F0F0',
-            borderWidth: isSelected ? 2 : 1,
-          }
-        ]}
-        onPress={() => toggleOrderSelection(item.id)}
-        onLongPress={() => navigation.navigate('OrderDetails', { orderId: item.id })}
-      >
+  const statusDetails = getStatusDetails(item.status);
+  const isSelected = selectedOrders.includes(item.id);
+      
+  return (
+    <TouchableOpacity 
+      style={[
+        styles.orderCard, 
+        { 
+          backgroundColor: theme.background,
+          borderColor: isSelected ? '#F58320' : '#F0F0F0',
+          borderWidth: isSelected ? 2 : 1,
+        }
+      ]}
+      onPress={() => toggleOrderSelection(item.id)}
+      onLongPress={() => navigation.navigate('OrderDetails', { orderId: item.id })}
+    >
         {isSelected && (
           <View style={styles.selectedBadge}>
             <Ionicons name="checkmark-circle" size={24} color="#F58320" />
@@ -352,9 +370,9 @@ const OrderStatusScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         <View style={styles.orderHeader}>
           <View style={styles.orderIdContainer}>
             <Ionicons name="receipt" size={20} color="#F58320" />
-            <Text style={[styles.orderId, { color: theme.text }]}> Commande #{item.id}</Text>
+            <Text style={[styles.orderId, { color: theme.text }]}> Commande {item.id}</Text>
           </View>
-          <View style={[
+          {/* <View style={[
             styles.statusBadge,
             { backgroundColor: statusDetails.bgColor }
           ]}>
@@ -366,7 +384,7 @@ const OrderStatusScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
             <Text style={[styles.statusText, { color: statusDetails.color }]}>
               {statusDetails.text}
             </Text>
-          </View>
+          </View> */}
         </View>
         
         <View style={styles.orderInfo}>
@@ -390,26 +408,54 @@ const OrderStatusScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         </View>
         
         <View style={styles.itemsPreview}>
-          {item.items.slice(0, 2).map((orderItem, index) => (
-            <View key={index} style={styles.itemPreviewRow}>
-              <View style={styles.productInfo}>
-                {orderItem.product.image ? (
-                  <Image 
-                    source={{ uri: orderItem.product.image }} 
-                    style={styles.productImage} 
-                  />
-                ) : (
-                  <Ionicons name="fast-food" size={24} color="#F58320" />
-                )}
-                <Text style={[styles.itemName, { color: theme.text }]}>
-                  {orderItem.product.name}
-                </Text>
+          {item.items.slice(0, 2).map((orderItem, index) => {
+            // Obtenez l'URL complète de l'image
+            const imageUrl = getFullImageUrl(orderItem.product.image); 
+              // ? orderItem.product.image.startsWith('http') 
+              //   ? orderItem.product.image 
+              //   : `https://backend.barakasn.com${orderItem.product.image}`
+              // : null;
+
+            return (
+              <View key={index} style={styles.itemPreviewRow}>
+
+                <View style={styles.productInfo}>
+                  {imageUrl ? (
+                    <Image 
+                      source={{ uri: imageUrl }} 
+                      style={styles.productImage} 
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View style={styles.productImagePlaceholder}>
+                      <Ionicons name="image-outline" size={20} color="#F58320" />
+                    </View>
+                  )}
+
+                  <View style={styles.productDetails}>
+                    <Text style={[styles.itemName, { color: theme.text }]} numberOfLines={1}>
+                      {orderItem.product.name}
+                    </Text>
+                    <Text style={[styles.itemPrice, { color: theme.text }]}>
+                      {parseFloat(item.total_price).toFixed(2)} FCFA
+                    </Text>
+                  </View>
+
+                </View>
+
+                <View style={styles.quantityContainer}>
+                  {/* <Text style={[styles.itemQuantity, { color: theme.text }]}>
+                    x{orderItem.quantity}
+                  </Text> */}
+
+                  {/* <Text style={[styles.itemTotal, { color: theme.text }]}>
+                    {(parseFloat(item.unit_price)) * item.quantity} FCFA
+                  </Text> */}
+
+                </View>
               </View>
-              <Text style={[styles.itemQuantity, { color: theme.text }]}>
-                x{orderItem.quantity}
-              </Text>
-            </View>
-          ))}
+            );
+          })}
           {item.items.length > 2 && (
             <Text style={[styles.moreItemsText, { color: theme.text }]}>
               +{item.items.length - 2} autres articles...
@@ -417,13 +463,21 @@ const OrderStatusScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
           )}
         </View>
         
-        <TouchableOpacity 
+        {/* <TouchableOpacity 
           style={styles.detailsButton}
           onPress={() => navigation.navigate('OrderDetails', { orderId: item.id })}
         >
           <Text style={styles.detailsButtonText}>Voir les détails</Text>
           <Ionicons name="chevron-forward" size={16} color="#F58320" />
+        </TouchableOpacity> */}
+        {item.status === 'pending' && (
+        <TouchableOpacity 
+          style={styles.paymentButton}
+          onPress={() => proceedToPayment(item.id)}
+        >
+          <Text style={styles.paymentButtonText}>Procéder au paiement</Text>
         </TouchableOpacity>
+      )}
       </TouchableOpacity>
     );
   };
@@ -530,8 +584,8 @@ const OrderStatusScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
       >
         {renderTabButton('all', 'list', 'Toutes')}
         {renderTabButton('pending', 'time', 'En attente')}
-        {renderTabButton('processing', 'sync', 'En cours')}
-        {renderTabButton('completed', 'checkmark-done', 'Terminées')}
+        {renderTabButton('processing', 'sync', 'Validées')}
+        {renderTabButton('completed', 'checkmark-done', 'Livréess')}
       </ScrollView>
 
       {filteredOrders.length === 0 ? (
@@ -590,6 +644,31 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: 'white',
+  },productDetails: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  itemPrice: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
+  },
+  quantityContainer: {
+    alignItems: 'flex-end',
+    marginLeft: 12,
+  },
+  itemTotal: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginTop: 4,
+  },
+  productImagePlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: '#f5f5f5',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   tabsContainer: {
     paddingVertical: 12,
@@ -797,6 +876,17 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 16,
   },
+  paymentButton: {
+  backgroundColor: '#F58320',
+  padding: 12,
+  borderRadius: 8,
+  marginTop: 12,
+  alignItems: 'center',
+},
+paymentButtonText: {
+  color: 'white',
+  fontWeight: 'bold',
+},
 });
 
 export default OrderStatusScreen;

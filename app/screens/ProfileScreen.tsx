@@ -71,7 +71,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
       const token = await AsyncStorage.getItem('access_token');
       if (!token) throw new Error('No authentication token');
 
-      const response = await fetch('https://backend.barakasn.com/api/v0/merchants/detail/', {
+      const response = await fetch('https://backend.barakasn.com/api/v0/merchants/complete-profile/', {
         method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${token}`,

@@ -7,7 +7,7 @@
 import React, { useState } from 'react';
 import { View, Text, FlatList, StyleSheet, Image, TouchableOpacity, TextInput, Alert, ScrollView } from 'react-native';
 import { goalsData, Goal, MiniTask } from '../../data/goalsData';
-import { Picker } from '@react-native-picker/picker';
+// import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../appearence/ThemeContext';
 import { lightTheme, darkTheme } from '../styles/theme';

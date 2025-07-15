@@ -1,10 +1,105 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Linking } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator,
+  Image, Linking, Alert, ScrollView } from 'react-native';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { useTheme } from '../appearence/ThemeContext';
+import { lightTheme, darkTheme } from '../styles/theme';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const PaymentScreen = ({ route, navigation }) => {
-  const { total } = route.params;
+  // const { total } = route.params;
   const [paymentMethod, setPaymentMethod] = useState(null);
+  const { selectedItems = [], total = 0 } = route.params || {};
+  const { isDarkMode } = useTheme();
+  const theme = isDarkMode ? darkTheme : lightTheme;
+  
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [orderConfirmed, setOrderConfirmed] = useState(false);
+  const [orderNumber, setOrderNumber] = useState(null);
+  
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('mobile_money');
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  
+  const clearCart = async () => {
+    try {
+      // Supprimer les items locaux du panier
+      const localIds = selectedItems
+        .filter(item => item.id.startsWith('local_'))
+        .map(item => item.id);
+      
+      if (localIds.length > 0) {
+        const localCart = await AsyncStorage.getItem('local_cart');
+        if (localCart) {
+          const cartItems = JSON.parse(localCart);
+          const updatedCart = cartItems.filter(item => !localIds.includes(item.id));
+          await AsyncStorage.setItem('local_cart', JSON.stringify(updatedCart));
+        }
+      }
+    } catch (error) {
+      console.warn('Error clearing cart:', error);
+    }
+  };
+
+  const confirmOrder = async () => {
+  setIsSubmitting(true);
+  
+  try {
+    const token = await AsyncStorage.getItem('access_token');
+    
+    if (!token) {
+      Alert.alert('Erreur', 'Vous devez être connecté pour passer commande');
+      navigation.navigate('Login');
+      return;
+    }
+
+    // Nouveau format avec price en entier (en centimes)
+    const orderData = {
+      products: selectedItems.flatMap(order => 
+        order.items.map(item => ({
+          product_id: parseInt(item.product.id, 10),
+          quantity: parseInt(item.quantity, 10),
+          price: Math.round(parseFloat(item.unit_price) * 100) // Convertir en centimes
+        }))
+      ),
+      payment_method: paymentMethod || 'cash',
+      total: Math.round(parseFloat(total) * 100), // Convertir en centimes
+      status: 'pending'
+    };
+
+    console.log('Données finales corrigées:', JSON.stringify(orderData, null, 2));
+
+    const response = await fetch('https://backend.barakasn.com/api/v0/orders/orders/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(orderData)
+    });
+
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(JSON.stringify(data));
+    }
+
+    setOrderConfirmed(true);
+    setOrderNumber(data.id || data.order_number);
+    await clearCart();
+    navigation.navigate('OrderConfirmationScreen');
+    
+  } catch (error) {
+    console.error('Erreur complète:', error);
+    Alert.alert(
+      'Erreur de validation',
+      `Le serveur a rejeté la commande : ${error.message}`,
+      [{ text: 'OK' }]
+    );
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   return (
     <View style={styles.container}>
@@ -43,11 +138,15 @@ const PaymentScreen = ({ route, navigation }) => {
       </View>
 
       <TouchableOpacity 
-        style={[styles.confirmButton]}
-        onPress={() => navigation.navigate('OrderConfirmationScreen')}
-        // disabled={!paymentMethod}
+        style={[styles.actionButton, { backgroundColor: '#F58320' }]}
+        onPress={confirmOrder}
+        disabled={isSubmitting}
       >
-        <Text style={styles.confirmButtonText}>Confirmer la commande</Text>
+        {isSubmitting ? (
+          <ActivityIndicator color="white" />
+        ) : (
+          <Text style={styles.actionButtonText}>Confirmer la commande</Text>
+        )}
       </TouchableOpacity>
     </View>
   );
@@ -132,6 +231,19 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  
+  actionButton: {
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 12,
+    elevation: 2,
+  },
+  actionButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: 'white',
   },
 });
 

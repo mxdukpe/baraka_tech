@@ -7,9 +7,8 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import RootLayout from '../app/_layout';
+import RootLayout from './app/_layout';
 
-import { CartProvider } from '../app/screens/CartContext';
 import { AuthProvider } from './context/AuthContext'; // Importez le AuthProvider
 
 /**
