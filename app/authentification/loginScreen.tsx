@@ -13,12 +13,15 @@ import {
     View,
     Modal,
     FlatList,
-    
-  Platform, AppState, ScrollView
+    Platform, 
+    AppState, 
+    ScrollView
 } from 'react-native';
-import DeviceInfo from 'react-native-device-info';
-import { CountryCode, Country } from '../../services/types'; // Nous allons créer ce type
-import countryData from './countryCodes.json'; // Fichier JSON avec les indicatifs
+// Remplacé react-native-device-info par Expo Constants
+import Constants from 'expo-constants';
+import * as Application from 'expo-application';
+import { CountryCode, Country } from '../../services/types';
+import countryData from './countryCodes.json';
 
 const { width } = Dimensions.get('window');
 
@@ -44,10 +47,30 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation, route }) => {
   useEffect(() => {
     const fetchDeviceId = async () => {
       try {
-        const id = await DeviceInfo.getUniqueId();
+        // Utilisation d'Expo Constants au lieu de react-native-device-info
+        let id = Constants.deviceId || Constants.installationId;
+        
+        // Essayer d'obtenir l'Android ID si on est sur Android
+        if (!id) {
+          try {
+            const androidId = await Application.getAndroidId();
+            id = androidId;
+          } catch (androidError) {
+            console.log('Android ID non disponible:', androidError);
+          }
+        }
+        
+        // Fallback vers un ID généré
+        if (!id) {
+          id = `expo-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        }
+        
         setDeviceId(id);
       } catch (error) {
         console.error('Erreur lors de la récupération du device_id:', error);
+        // Génération d'un ID de fallback en cas d'erreur
+        const fallbackId = `fallback-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        setDeviceId(fallbackId);
         Alert.alert('Erreur', 'Impossible de récupérer l\'identifiant de l\'appareil.');
       }
     };
@@ -140,7 +163,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation, route }) => {
 
   return (
     <SafeAreaView style={[styles.container]}>
-
       {/* Contenu principal avec ScrollView */}
       <ScrollView 
         style={{ flex: 1 }}
@@ -179,13 +201,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation, route }) => {
               />
             </View>
           </View>
-
-          {/* <TouchableOpacity 
-            style={styles.forgotPassword}
-            onPress={() => navigation.navigate('ForgotPassword')}
-          >
-            <Text style={styles.forgotPasswordText}>Mot de passe oublié ?</Text>
-          </TouchableOpacity> */}
 
           <TouchableOpacity 
             style={styles.loginButton}
@@ -267,8 +282,6 @@ const styles = StyleSheet.create({
   // Contenu principal avec marge pour éviter le chevauchement
   scrollContent: {
     flexGrow: 1,
-    // paddingTop: Platform.OS === 'ios' ? 110 : 90, // Marge pour éviter le header
-    // paddingBottom: 6,
   },
   title: {
     fontSize: 32,

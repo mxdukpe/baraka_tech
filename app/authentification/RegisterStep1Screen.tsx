@@ -10,13 +10,13 @@ import {
   Alert,
   FlatList,
   Modal,
-
   ActivityIndicator
 } from 'react-native';
-import DeviceInfo from 'react-native-device-info';
-
-import { CountryCode, Country } from '../../services/types'; // Nous allons créer ce type
-import countryData from './countryCodes.json'; // Fichier JSON avec les indicatifs
+// Remplacé react-native-device-info par Expo Constants
+import Constants from 'expo-constants';
+import * as Application from 'expo-application';
+import { CountryCode, Country } from '../../services/types';
+import countryData from './countryCodes.json';
 
 type RegisterStep1ScreenProps = {
   navigation: any;
@@ -25,17 +25,17 @@ type RegisterStep1ScreenProps = {
 
 const RegisterStep1Screen: React.FC<RegisterStep1ScreenProps> = ({ navigation, route }) => {
   const [device_id, setDeviceId] = useState<string>('');
-    const [phone_number, setPhoneNumber] = useState(route.params?.phone_number || '');
-    const [first_name, setFirstName] = useState(route.params?.first_name || '');
-    const [last_name, setLastName] = useState(route.params?.last_name || '');
-    const [isLoading, setIsLoading] = useState(false);
-    const [selectedCountry, setSelectedCountry] = useState<Country>({
-      code: 'CD',
-      name: 'Sénégal',
-      dial_code: '+221'
-    });
-    const [modalVisible, setModalVisible] = useState(false);
-    const [searchText, setSearchText] = useState('');
+  const [phone_number, setPhoneNumber] = useState(route.params?.phone_number || '');
+  const [first_name, setFirstName] = useState(route.params?.first_name || '');
+  const [last_name, setLastName] = useState(route.params?.last_name || '');
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectedCountry, setSelectedCountry] = useState<Country>({
+    code: 'SN',
+    name: 'Sénégal',
+    dial_code: '+221'
+  });
+  const [modalVisible, setModalVisible] = useState(false);
+  const [searchText, setSearchText] = useState('');
 
   const filteredCountries = countryData.filter(country => 
     country.name.toLowerCase().includes(searchText.toLowerCase()) || 
@@ -45,101 +45,126 @@ const RegisterStep1Screen: React.FC<RegisterStep1ScreenProps> = ({ navigation, r
   useEffect(() => {
     const fetchDeviceId = async () => {
       try {
-        const id = await DeviceInfo.getUniqueId();
+        // Utilisation d'Expo Constants au lieu de react-native-device-info
+        let id = Constants.deviceId || Constants.installationId;
+        
+        // Essayer d'obtenir l'Android ID si on est sur Android
+        if (!id) {
+          try {
+            const androidId = await Application.getAndroidId();
+            id = androidId;
+          } catch (androidError) {
+            console.log('Android ID non disponible:', androidError);
+          }
+        }
+        
+        // Fallback vers un ID généré
+        if (!id) {
+          id = `expo-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        }
+        
         setDeviceId(id);
       } catch (error) {
         console.error('Erreur device_id:', error);
+        // Génération d'un ID de fallback en cas d'erreur
+        const fallbackId = `fallback-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        setDeviceId(fallbackId);
         Alert.alert('Erreur', 'Impossible de récupérer l\'ID de l\'appareil');
       }
     };
     fetchDeviceId();
   }, []);
 
-  
-  
-  // if (phone_number.length > 10 || phone_number.length < 8) {
-  //   Alert.alert('Erreur', 'Veuillez entrer votre numéro de téléphone valide');
-  //   return;
-  // }
-
   // Combiner l'indicatif et le numéro
   const fullPhoneNumber = `${selectedCountry.dial_code}${phone_number.replace(/^0+/, '')}`;
+  
   const handleSendPhoneNumber = async () => {
-
-
-  setIsLoading(true);
-
-  try {
-    const payload = {
-      phone_number: `${fullPhoneNumber}`,
-      device_id,
-    };
-
-    const response = await fetch('https://backend.barakasn.com/api/v0/merchants/register/', {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
-
-    const responseData = await response.json().catch(() => ({}));
-
-    if (!response.ok) {
-      // Extraction détaillée des messages d'erreur
-      let errorMessage = 'Erreur lors de l\'enregistrement';
-      
-      if (responseData.detail) {
-        errorMessage = responseData.detail;
-      } else if (responseData.fullPhoneNumber) {
-        errorMessage = responseData.fullPhoneNumber.join('\n');
-      } else if (responseData.non_field_errors) {
-        errorMessage = responseData.non_field_errors.join('\n');
-      } else if (typeof responseData === 'string') {
-        errorMessage = responseData;
-      } else if (Object.keys(responseData).length > 0) {
-        errorMessage = Object.entries(responseData)
-          .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : value}`)
-          .join('\n');
-      }
-
-      throw new Error(errorMessage);
+    // Validation basique du numéro de téléphone
+    if (!phone_number) {
+      Alert.alert('Erreur', 'Veuillez entrer votre numéro de téléphone');
+      return;
     }
 
-    navigation.navigate('OtpVerification', {
-      phone_number: payload.phone_number,
-      device_id,
-    });
+    if (phone_number.length > 10 || phone_number.length < 8) {
+      Alert.alert('Erreur', 'Veuillez entrer un numéro de téléphone valide');
+      return;
+    }
 
-  } catch (error) {
-    console.error('Erreur:', error);
-    Alert.alert(
-      'Erreur',
-      error instanceof Error ? error.message : 'Une erreur inconnue est survenue'
-    );
-  } finally {
-    setIsLoading(false);
-  }
-};
+    setIsLoading(true);
+
+    try {
+      const payload = {
+        phone_number: fullPhoneNumber,
+        device_id,
+      };
+
+      const response = await fetch('https://backend.barakasn.com/api/v0/merchants/register/', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const responseData = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        // Extraction détaillée des messages d'erreur
+        let errorMessage = 'Erreur lors de l\'enregistrement';
+        
+        if (responseData.detail) {
+          errorMessage = responseData.detail;
+        } else if (responseData.phone_number) {
+          errorMessage = Array.isArray(responseData.phone_number) 
+            ? responseData.phone_number.join('\n')
+            : responseData.phone_number;
+        } else if (responseData.non_field_errors) {
+          errorMessage = responseData.non_field_errors.join('\n');
+        } else if (typeof responseData === 'string') {
+          errorMessage = responseData;
+        } else if (Object.keys(responseData).length > 0) {
+          errorMessage = Object.entries(responseData)
+            .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : value}`)
+            .join('\n');
+        }
+
+        throw new Error(errorMessage);
+      }
+
+      navigation.navigate('OtpVerification', {
+        phone_number: payload.phone_number,
+        device_id,
+      });
+
+    } catch (error) {
+      console.error('Erreur:', error);
+      Alert.alert(
+        'Erreur',
+        error instanceof Error ? error.message : 'Une erreur inconnue est survenue'
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handlePhoneChange = (text: string) => {
     setPhoneNumber(text.replace(/\D/g, ''));
   };
-    const renderCountryItem = ({ item }: { item: Country }) => (
-      <TouchableOpacity
-        style={styles.countryItem}
-        onPress={() => {
-          setSelectedCountry(item);
-          setModalVisible(false);
-          setSearchText('');
-        }}
-      >
-        <Text style={styles.countryName}>{item.name}</Text>
-        <Text style={styles.countryCode}>{item.dial_code}</Text>
-      </TouchableOpacity>
-    );
-  
+
+  const renderCountryItem = ({ item }: { item: Country }) => (
+    <TouchableOpacity
+      style={styles.countryItem}
+      onPress={() => {
+        setSelectedCountry(item);
+        setModalVisible(false);
+        setSearchText('');
+      }}
+    >
+      <Text style={styles.countryName}>{item.name}</Text>
+      <Text style={styles.countryCode}>{item.dial_code}</Text>
+    </TouchableOpacity>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -159,11 +184,12 @@ const RegisterStep1Screen: React.FC<RegisterStep1ScreenProps> = ({ navigation, r
               <TextInput
                 style={[styles.input, styles.phoneInput]}
                 value={phone_number}
-                onChangeText={setPhoneNumber}
+                onChangeText={handlePhoneChange}
                 keyboardType="phone-pad"
                 autoCapitalize="none"
                 placeholderTextColor="#999"
                 placeholder="Numéro de téléphone"
+                maxLength={10}
               />
             </View>
           </View>
@@ -172,9 +198,9 @@ const RegisterStep1Screen: React.FC<RegisterStep1ScreenProps> = ({ navigation, r
             <ActivityIndicator size="large" color="#F58320" style={styles.loader} />
           ) : (
             <TouchableOpacity
-              style={styles.continueButton}
+              style={[styles.continueButton, (!phone_number || isLoading) && styles.disabledButton]}
               onPress={handleSendPhoneNumber}
-              disabled={isLoading}
+              disabled={!phone_number || isLoading}
             >
               <Text style={styles.continueButtonText}>Continuer</Text>
             </TouchableOpacity>
@@ -189,40 +215,40 @@ const RegisterStep1Screen: React.FC<RegisterStep1ScreenProps> = ({ navigation, r
         </View>
       </ScrollView>
       
-            {/* Modal pour sélectionner le pays */}
-            <Modal
-              animationType="slide"
-              transparent={false}
-              visible={modalVisible}
-              onRequestClose={() => setModalVisible(false)}
-            >
-              <SafeAreaView style={styles.modalContainer}>
-                <View style={styles.searchContainer}>
-                  <TextInput
-                    style={styles.searchInput}
-                    placeholder="Rechercher un pays..."
-                    value={searchText}
-                    onChangeText={setSearchText}
-                    autoFocus={true}
-                  />
-                </View>
-                <FlatList
-                  data={filteredCountries}
-                  renderItem={renderCountryItem}
-                  keyExtractor={(item) => item.code}
-                  keyboardShouldPersistTaps="handled"
-                />
-                <TouchableOpacity
-                  style={styles.closeButton}
-                  onPress={() => {
-                    setModalVisible(false);
-                    setSearchText('');
-                  }}
-                >
-                  <Text style={styles.closeButtonText}>Fermer</Text>
-                </TouchableOpacity>
-              </SafeAreaView>
-            </Modal>
+      {/* Modal pour sélectionner le pays */}
+      <Modal
+        animationType="slide"
+        transparent={false}
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.searchContainer}>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Rechercher un pays..."
+              value={searchText}
+              onChangeText={setSearchText}
+              autoFocus={true}
+            />
+          </View>
+          <FlatList
+            data={filteredCountries}
+            renderItem={renderCountryItem}
+            keyExtractor={(item) => item.code}
+            keyboardShouldPersistTaps="handled"
+          />
+          <TouchableOpacity
+            style={styles.closeButton}
+            onPress={() => {
+              setModalVisible(false);
+              setSearchText('');
+            }}
+          >
+            <Text style={styles.closeButtonText}>Fermer</Text>
+          </TouchableOpacity>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -239,7 +265,8 @@ const styles = StyleSheet.create({
   formContainer: {
     padding: 30,
     paddingTop: 50,
-  }, loader: {
+  }, 
+  loader: {
     marginTop: 20,
   },
   title: {
@@ -278,8 +305,6 @@ const styles = StyleSheet.create({
   },
   phoneInput: {
     flex: 1,
-    padding: 15,
-    fontSize: 16,
   },
   phoneInputContainer: {
     flexDirection: 'row',
@@ -362,6 +387,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 5,
+  },
+  disabledButton: {
+    backgroundColor: '#ccc',
+    shadowOpacity: 0,
+    elevation: 0,
   },
   continueButtonText: {
     color: '#fff',
