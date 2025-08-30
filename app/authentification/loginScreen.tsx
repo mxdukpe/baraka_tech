@@ -13,7 +13,8 @@ import {
     View,
     Modal,
     FlatList,
-    Platform
+    
+  Platform, AppState, ScrollView
 } from 'react-native';
 import DeviceInfo from 'react-native-device-info';
 import { CountryCode, Country } from '../../services/types'; // Nous allons créer ce type
@@ -57,6 +58,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation, route }) => {
   const handleLogin = async () => {
     if (!phone_number) {
       Alert.alert('Erreur', 'Veuillez entrer votre numéro de téléphone');
+      return;
+    }
+
+    if (phone_number.length > 10 || phone_number.length < 8) {
+      Alert.alert('Erreur', 'Veuillez entrer votre numéro de téléphone valide');
       return;
     }
 
@@ -134,101 +140,109 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation, route }) => {
 
   return (
     <SafeAreaView style={[styles.container]}>
-      <View style={styles.logoContainer}>
-        <Image 
-          source={require('../../assets/images/baraka_icon.png')} 
-          style={styles.logo}
-          resizeMode="contain"
-        />
-      </View>
 
-      <View style={styles.formContainer}>
-        <Text style={styles.title}>Bienvenue</Text>
-        <Text style={styles.subtitle}>Connectez-vous pour continuer</Text>
-
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>Numéro de téléphone</Text>
-          <View style={styles.phoneInputContainer}>
-            <TouchableOpacity 
-              style={styles.countryPickerButton}
-              onPress={() => setModalVisible(true)}
-            >
-              <Text style={styles.countryPickerText}>{selectedCountry.dial_code}</Text>
-            </TouchableOpacity>
-            <TextInput
-              style={[styles.input, styles.phoneInput]}
-              value={phone_number}
-              onChangeText={setPhoneNumber}
-              keyboardType="phone-pad"
-              autoCapitalize="none"
-              placeholderTextColor="#999"
-              placeholder="Numéro de téléphone"
-            />
-          </View>
-        </View>
-
-        <TouchableOpacity 
-          style={styles.forgotPassword}
-          onPress={() => navigation.navigate('ForgotPassword')}
-        >
-          <Text style={styles.forgotPasswordText}>Mot de passe oublié ?</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={styles.loginButton}
-          onPress={handleLogin}
-          activeOpacity={0.8}
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.loginButtonText}>Se connecter</Text>
-          )}
-        </TouchableOpacity>
-
-        <View style={styles.registerContainer}>
-          <Text style={styles.registerText}>Vous n'avez pas encore de compte ? </Text>
-          <TouchableOpacity onPress={() => navigation.navigate("RegisterStep1Screen")}>
-            <Text style={styles.registerLink}>Inscrivez-vous</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Modal pour sélectionner le pays */}
-      <Modal
-        animationType="slide"
-        transparent={false}
-        visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
+      {/* Contenu principal avec ScrollView */}
+      <ScrollView 
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
       >
-        <SafeAreaView style={styles.modalContainer}>
-          <View style={styles.searchContainer}>
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Rechercher un pays..."
-              value={searchText}
-              onChangeText={setSearchText}
-              autoFocus={true}
-            />
-          </View>
-          <FlatList
-            data={filteredCountries}
-            renderItem={renderCountryItem}
-            keyExtractor={(item) => item.code}
-            keyboardShouldPersistTaps="handled"
+        <View style={styles.logoContainer}>
+          <Image 
+            source={require('../../assets/images/baraka_icon.png')} 
+            style={styles.logo}
+            resizeMode="contain"
           />
-          <TouchableOpacity
-            style={styles.closeButton}
-            onPress={() => {
-              setModalVisible(false);
-              setSearchText('');
-            }}
+        </View>
+
+        <View style={styles.formContainer}>
+          <Text style={styles.title}>Bienvenue</Text>
+          <Text style={styles.subtitle}>Connectez-vous pour continuer</Text>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Numéro de téléphone</Text>
+            <View style={styles.phoneInputContainer}>
+              <TouchableOpacity 
+                style={styles.countryPickerButton}
+                onPress={() => setModalVisible(true)}
+              >
+                <Text style={styles.countryPickerText}>{selectedCountry.dial_code}</Text>
+              </TouchableOpacity>
+              <TextInput
+                style={[styles.input, styles.phoneInput]}
+                value={phone_number}
+                onChangeText={setPhoneNumber}
+                keyboardType="phone-pad"
+                autoCapitalize="none"
+                placeholderTextColor="#999"
+                placeholder="Numéro de téléphone"
+              />
+            </View>
+          </View>
+
+          {/* <TouchableOpacity 
+            style={styles.forgotPassword}
+            onPress={() => navigation.navigate('ForgotPassword')}
           >
-            <Text style={styles.closeButtonText}>Fermer</Text>
+            <Text style={styles.forgotPasswordText}>Mot de passe oublié ?</Text>
+          </TouchableOpacity> */}
+
+          <TouchableOpacity 
+            style={styles.loginButton}
+            onPress={handleLogin}
+            activeOpacity={0.8}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.loginButtonText}>Se connecter</Text>
+            )}
           </TouchableOpacity>
-        </SafeAreaView>
-      </Modal>
+
+          <View style={styles.registerContainer}>
+            <Text style={styles.registerText}>Vous n'avez pas encore de compte ? </Text>
+            <TouchableOpacity onPress={() => navigation.navigate("RegisterStep1Screen")}>
+              <Text style={styles.registerLink}>Inscrivez-vous</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Modal pour sélectionner le pays */}
+        <Modal
+          animationType="slide"
+          transparent={false}
+          visible={modalVisible}
+          onRequestClose={() => setModalVisible(false)}
+        >
+          <SafeAreaView style={styles.modalContainer}>
+            <View style={styles.searchContainer}>
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Rechercher un pays..."
+                value={searchText}
+                onChangeText={setSearchText}
+                autoFocus={true}
+              />
+            </View>
+            <FlatList
+              data={filteredCountries}
+              renderItem={renderCountryItem}
+              keyExtractor={(item) => item.code}
+              keyboardShouldPersistTaps="handled"
+            />
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => {
+                setModalVisible(false);
+                setSearchText('');
+              }}
+            >
+              <Text style={styles.closeButtonText}>Fermer</Text>
+            </TouchableOpacity>
+          </SafeAreaView>
+        </Modal>
+      </ScrollView>
     </SafeAreaView>
   );
 };
@@ -249,6 +263,12 @@ const styles = StyleSheet.create({
   },
   formContainer: {
     paddingHorizontal: 30,
+  },
+  // Contenu principal avec marge pour éviter le chevauchement
+  scrollContent: {
+    flexGrow: 1,
+    // paddingTop: Platform.OS === 'ios' ? 110 : 90, // Marge pour éviter le header
+    // paddingBottom: 6,
   },
   title: {
     fontSize: 32,

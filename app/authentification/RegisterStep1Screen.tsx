@@ -55,6 +55,13 @@ const RegisterStep1Screen: React.FC<RegisterStep1ScreenProps> = ({ navigation, r
     fetchDeviceId();
   }, []);
 
+  
+  
+  // if (phone_number.length > 10 || phone_number.length < 8) {
+  //   Alert.alert('Erreur', 'Veuillez entrer votre numéro de téléphone valide');
+  //   return;
+  // }
+
   // Combiner l'indicatif et le numéro
   const fullPhoneNumber = `${selectedCountry.dial_code}${phone_number.replace(/^0+/, '')}`;
   const handleSendPhoneNumber = async () => {

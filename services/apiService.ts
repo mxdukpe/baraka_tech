@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Product, ProductResponse} from './types'; // Importez les types
+import { Product, ProductResponse, Category, PaginatedCategoryResponse} from './types'; // Importez les types
 // import { Order, OrderResponse, ApiResponse } from './types';
 // apiService.ts
 export interface PaginatedResponse<T> {
@@ -69,10 +69,57 @@ export const getOrders = async () => {
 };
 
 // Récupérer tous les produits
-export const getProducts = async (token: string, page?: number): Promise<Product[]> => {
+// Récupérer exactement 50 produits
+export const getProducts = async (token: string): Promise<Product[]> => {
+  try {
+    const allProducts: Product[] = [];
+    let currentPage = 1;
+    const pageSize = 10; // Taille de page actuelle de votre API
+    const maxProducts = 50;
+
+    while (allProducts.length < maxProducts) {
+      const response = await axios.get<PaginatedResponse<Product>>(
+        `${API_BASE_URL}products/products/?page=${currentPage}&page_size=${pageSize}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      // Vérifiez que la réponse contient bien des données
+      if (!response.data?.results || response.data.results.length === 0) {
+        console.warn('Aucun produit trouvé sur cette page');
+        break; // Sortir de la boucle s'il n'y a plus de produits
+      }
+
+      // Ajouter les produits récupérés
+      const remainingSlots = maxProducts - allProducts.length;
+      const productsToAdd = response.data.results.slice(0, remainingSlots);
+      allProducts.push(...productsToAdd);
+
+      // Si on a atteint 50 produits ou qu'il n'y a plus de pages
+      if (allProducts.length >= maxProducts || response.data.results.length < pageSize) {
+        break;
+      }
+
+      currentPage++;
+    }
+
+    console.log(`Récupération de ${allProducts.length} produits`);
+    return allProducts.slice(0, maxProducts); // S'assurer qu'on ne dépasse pas 50
+    
+  } catch (error) {
+    console.error('Erreur API détaillée:', error);
+    throw new Error('Erreur lors de la récupération des produits');
+  }
+};
+
+// Alternative plus simple si votre API supporte une page_size plus grande
+export const getProducts50Simple = async (token: string): Promise<Product[]> => {
   try {
     const response = await axios.get<PaginatedResponse<Product>>(
-      `${API_BASE_URL}products/products/${page ? `?page=${page}&page_size=10` : ''}`,
+      `${API_BASE_URL}products/products/?page=1&page_size=50`,
       {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -86,7 +133,40 @@ export const getProducts = async (token: string, page?: number): Promise<Product
       return [];
     }
 
-    return response.data.results;
+    return response.data.results.slice(0, 50); // S'assurer de ne pas dépasser 50
+  } catch (error) {
+    console.error('Erreur API détaillée:', error);
+    throw new Error('Erreur lors de la récupération des produits');
+  }
+};
+
+// Service pour récupérer les produits avec pagination
+export const getProductsPaginated = async (
+  token: string| null, 
+  page: number = 1, 
+  pageSize: number = 20
+): Promise<PaginatedResponse<Product>> => {
+  try {
+    const response = await axios.get<PaginatedResponse<Product>>(
+      `${API_BASE_URL}products/products/?page=${page}&page_size=${pageSize}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    if (!response.data?.results) {
+      console.warn('Réponse API vide mais réussie');
+      return {
+        count: 0,
+        next: null,
+        previous: null,
+        results: []
+      };
+    }
+
+    return response.data;
   } catch (error) {
     console.error('Erreur API détaillée:', error);
     throw new Error('Erreur lors de la récupération des produits');
@@ -116,12 +196,113 @@ export const getProductById = async (id: number): Promise<Product> => {
   }
 };
 
+// Récupérer exactement 50 catégories avec pagination
+// export const getCategories = async (): Promise<Category[]> => {
+//   try {
+//     const allCategories: Category[] = [];
+//     let currentPage = 1;
+//     const pageSize = 10; // Ajustez selon votre API
+//     const maxCategories = 9000;
+
+//     while (allCategories.length < maxCategories) {
+//       const response = await fetch(
+//         `https://backend.barakasn.com/api/v0/products/categories/?page=${currentPage}&page_size=${pageSize}`
+//       );
+
+//       if (!response.ok) {
+//         throw new Error(`Erreur HTTP: ${response.status}`);
+//       }
+
+//       const data: PaginatedCategoryResponse = await response.json();
+
+//       // Vérifiez que la réponse contient bien des données
+//       if (!data?.results || data.results.length === 0) {
+//         console.warn('Aucune catégorie trouvée sur cette page');
+//         break; // Sortir de la boucle s'il n'y a plus de catégories
+//       }
+
+//       // Ajouter les catégories récupérées
+//       const remainingSlots = maxCategories - allCategories.length;
+//       const categoriesToAdd = data.results.slice(0, remainingSlots);
+//       allCategories.push(...categoriesToAdd);
+
+//       // Si on a atteint 50 catégories ou qu'il n'y a plus de pages
+//       if (allCategories.length >= maxCategories || data.results.length < pageSize) {
+//         break;
+//       }
+
+//       currentPage++;
+//     }
+
+//     console.log(`Récupération de ${allCategories.length} catégories`);
+//     return allCategories.slice(0, maxCategories); // S'assurer qu'on ne dépasse pas 50
+    
+//   } catch (error) {
+//     console.error('Erreur lors de la récupération des catégories:', error);
+//     throw new Error('Erreur lors de la récupération des catégories');
+//   }
+// };
+
 export const getCategories = async () => {
   const response = await fetch('https://backend.barakasn.com/api/v0/products/categories/');
   if (!response.ok) {
     throw new Error('Erreur lors de la récupération des catégories');
   }
   return response.json();
+};
+
+// Alternative plus simple si votre API supporte une page_size plus grande
+export const getCategories50Simple = async (): Promise<Category[]> => {
+  try {
+    const response = await fetch(
+      'https://backend.barakasn.com/api/v0/products/categories/?page=1&page_size=50'
+    );
+
+    if (!response.ok) {
+      throw new Error(`Erreur HTTP: ${response.status}`);
+    }
+
+    const data: PaginatedCategoryResponse = await response.json();
+
+    // Vérifiez que la réponse contient bien des données
+    if (!data?.results) {
+      console.warn('Réponse API vide mais réussie');
+      return [];
+    }
+
+    return data.results.slice(0, 50); // S'assurer de ne pas dépasser 50
+  } catch (error) {
+    console.error('Erreur lors de la récupération des catégories:', error);
+    throw new Error('Erreur lors de la récupération des catégories');
+  }
+};
+
+// Version qui garde votre structure originale mais limite à 50
+export const getCategoriesOriginalStyle = async (): Promise<Category[]> => {
+  try {
+    const response = await fetch('https://backend.barakasn.com/api/v0/products/categories/');
+    
+    if (!response.ok) {
+      throw new Error('Erreur lors de la récupération des catégories');
+    }
+    
+    const data = await response.json();
+    
+    // Si c'est un tableau direct
+    if (Array.isArray(data)) {
+      return data.slice(0, 50);
+    }
+    
+    // Si c'est une réponse paginée
+    if (data.results && Array.isArray(data.results)) {
+      return data.results.slice(0, 50);
+    }
+    
+    return [];
+  } catch (error) {
+    console.error('Erreur lors de la récupération des catégories:', error);
+    throw new Error('Erreur lors de la récupération des catégories');
+  }
 };
 
 export const getProductsByCategory = async (categoryId: string) => {

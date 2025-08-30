@@ -44,6 +44,9 @@ import OrderStatusScreen from './screens/OrderStatusScreen';
 import AdminDashboard from './dashboard/AdminDashboard';
 import CategoryProductsScreen from './screens/CategoryProductsScreen';
 import PaiementValidationScreen from './screens/PaiementValidationScreen';
+import MessagesScreen from './screens/MessagesScreen';
+import HeaderWithCart from './screens/HeaderWithCart';
+import BrandsScreen from './screens/BrandsScreen';
 
 import { RootStackParamList } from '../services/types'; // Assurez-vous d'avoir défini RootStackParamList
 
@@ -59,7 +62,7 @@ const Tab = createBottomTabNavigator();
 /**
  * Type pour les noms d'icônes valides.
  */
-type IconName = 'home' | 'home-outline' | 'call' |  'call-outline' | 'tv' |  'tv-outline' | 'notifications' | 'notifications-outline' | 'flag-outline' | 'notifications' | 'notifications-outline' | 'search' | 'search-outline' | 'stats-chart' | 'stats-chart-outline' | 'person' | 'person-outline' | 'receipt' | 'receipt-outline';
+type IconName = 'home' | 'home-outline' | 'sparkles' | 'sparkles-outline' | 'pricetag' | 'pricetag-outline' | 'call' |  'call-outline' | 'tv' |  'tv-outline' | 'notifications' | 'notifications-outline' | 'flag-outline' | 'notifications' | 'notifications-outline' | 'search' | 'search-outline' | 'stats-chart' | 'stats-chart-outline' | 'person' | 'person-outline' | 'receipt' | 'receipt-outline';
 
 /**
  * Composant pour la navigation par onglets.
@@ -79,14 +82,16 @@ function HomeTabs() {
               iconName = focused ? 'home' : 'home-outline';
             } else if (route.name === 'CategoriesTab') {
               iconName = focused ? 'tv' : 'tv-outline'; // Utilisez 'flag' pour les objectifs
-            }else if (route.name === 'NotificationsTab') {
+            }else if (route.name === 'NotificationsScreen') {
               iconName = focused ? 'receipt' : 'receipt-outline'; // Utilisez 'flag' pour les objectifs
-            } else if (route.name === 'ScanTab') {
-              iconName = focused ? 'search' : 'search-outline';
+            } else if (route.name === 'SaleScreen') {
+              iconName = focused ? 'pricetag' : 'pricetag-outline';
             } else if (route.name === 'ContactScreen') {
               iconName = focused ? 'call' : 'call-outline'; // Utilisez 'stats-chart' pour les progrès
             } else if (route.name === 'ProfileTab') {
               iconName = focused ? 'person' : 'person-outline';
+            } else if (route.name === 'NewArrivals') {
+              iconName = focused ? 'sparkles' : 'sparkles-outline';
             }
 
             // Retourner l'icône correspondante
@@ -114,14 +119,14 @@ function HomeTabs() {
           options={{ tabBarLabel: 'Catégories', headerShown: false }}
         />
         <Tab.Screen
-          name="NotificationsTab"
-          component={CatalogueScreen}
-          options={{ tabBarLabel: 'Catalogue', headerShown: false }}
+          name="NotificationsScreen"
+          component={NotificationsScreen}
+          options={{ tabBarLabel: 'Notifications', headerShown: false }}
         />
         <Tab.Screen
-          name="ScanTab"
-          component={SearchScreen}
-          options={{ tabBarLabel: 'Rechercher', headerShown: false }}
+          name="SaleScreen"
+          component={SaleScreen}
+          options={{ tabBarLabel: 'Soldes', headerShown: false }}
         />
         <Tab.Screen
           name="ContactScreen"
@@ -129,9 +134,9 @@ function HomeTabs() {
           options={{ tabBarLabel: 'Contact', headerShown: false }}
         />
         <Tab.Screen
-          name="ProfileTab"
-          component={ProfileScreen}
-          options={{ tabBarLabel: 'Profil', headerShown: false }}
+          name="NewArrivals"
+          component={NewArrivals}
+          options={{ tabBarLabel: 'Nouveautés', headerShown: false }}
         />
       </Tab.Navigator>
     </ThemeProvider>
@@ -142,6 +147,7 @@ function HomeTabs() {
  * Composant racine de l'application.
  * @returns {JSX.Element} La structure de navigation de l'application.
  */
+
 export default function RootLayout() {
   // useEffect(() => {
   //   const setupFirebaseMessaging = async () => {
@@ -199,23 +205,17 @@ export default function RootLayout() {
         <Stack.Screen name="OrderConfirmationScreen" component={OrderConfirmationScreen} options={{ headerShown: false }}/>
         <Stack.Screen name="ProductListScreen" component={ProductListScreen} options={{ headerShown: false }}/>
         <Stack.Screen name="BulkUploadScreen" component={BulkUploadScreen} options={{ headerShown: false }}/>
-        <Stack.Screen name="AdminDashboard" component={AdminDashboard} options={{ headerShown: false }}/>
-        <Stack.Screen name="NotificationsScreen" component={NotificationsScreen} options={{ headerShown: false }}/>
+        {/* <Stack.Screen name="AdminDashboard" component={AdminDashboard} options={{ headerShown: false }}/> */}
+        {/* <Stack.Screen name="NotificationsScreen" component={NotificationsScreen} options={{ headerShown: false }}/> */}
         <Stack.Screen name="CategoryProductsScreen" component={CategoryProductsScreen} options={{ headerShown: false }}/>
         <Stack.Screen name="PaiementValidation" component={PaiementValidationScreen} options={{ title: 'Validation Paiement' }}/>
+        <Stack.Screen name="MessagesScreen" component={MessagesScreen} options={{ headerShown: false }}/>
+        <Stack.Screen name="HeaderWithCart" component={HeaderWithCart} options={{ headerShown: false }}/>
+        <Stack.Screen name="SearchScreen" component={SearchScreen} options={{ headerShown: false }}/>
+        <Stack.Screen name="NotificationsScreen" component={NotificationsScreen} options={{ headerShown: false }}/>
+        <Stack.Screen name="BrandsScreen" component={BrandsScreen} options={{ headerShown: false }}/>
+        <Stack.Screen name="ProfileScreen" component={ProfileScreen} options={{ headerShown: false }}/>
       </Stack.Navigator>
     </ThemeProvider>
   );
 }
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  title: {
-    fontSize: 24,
-    marginBottom: 20,
-  },
-});

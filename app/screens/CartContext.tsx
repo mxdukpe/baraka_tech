@@ -27,7 +27,9 @@ const CartScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
-  const { isDarkMode } = useTheme();
+  
+  const { isDarkMode, toggleTheme } = useTheme();
+  const [showPrices, setShowPrices] = useState(true);
   const theme = isDarkMode ? darkTheme : lightTheme;
   const [selectedOrders, setSelectedOrders] = useState<string[]>([]);
   const [selectMode, setSelectMode] = useState(false);

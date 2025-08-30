@@ -13,7 +13,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../appearence/ThemeContext';
 
 const AdminDashboard = ({ navigation }) => {
-  const { isDarkMode } = useTheme();
+  
+  const { isDarkMode, toggleTheme } = useTheme();
+  const [showPrices, setShowPrices] = useState(true);
   const [activeTab, setActiveTab] = useState('commandes');
   const [stats, setStats] = useState({
     commandes: 0,
@@ -199,7 +201,9 @@ const PromotionsTab = () => {
 
 // Composant de carte de statistique
 const StatCard = ({ icon, title, value, color, isCurrency = false }) => {
-  const { isDarkMode } = useTheme();
+  
+  const { isDarkMode, toggleTheme } = useTheme();
+  const [showPrices, setShowPrices] = useState(true);
   
   const formatValue = (val) => {
     if (isCurrency) {

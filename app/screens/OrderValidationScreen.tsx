@@ -1,14 +1,142 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, 
-  Image, Alert } from 'react-native';
+  Image, Alert,ScrollView,
+  Platform, AppState,
+  Dimensions, TouchableWithoutFeedback, Switch , } from 'react-native';
 import { Ionicons, MaterialIcons, FontAwesome } from '@expo/vector-icons';
 import { useTheme } from '../appearence/ThemeContext';
 import { lightTheme, darkTheme } from '../styles/theme';
+import { Icon, Badge } from 'react-native-elements';
+import HeaderWithCart from './HeaderWithCart';
+import AuthService from './authService';
+import { Product, Order } from '../../services/types';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useCart } from './useCart';
+import ScreenshotPrevent from 'react-native-screenshot-prevent';
+import { BlurView } from '@react-native-community/blur';
 
+
+// Fonction pour obtenir les dimensions responsives
+const getResponsiveDimensions = () => {
+  const { width, height } = Dimensions.get('window');
+  const isTablet = width >= 768;
+  const isLargeScreen = width >= 1024;
+  
+  return {
+    width,
+    height,
+    isTablet,
+    isLargeScreen,
+    isSmallScreen: width < 375,
+    // Colonnes adaptatives - ajustez en fonction de la largeurproductColumns: 2,
+    categoryColumns: width > 600 ? (width > 900 ? 6 : 5) : 4,
+    // Padding adaptatif
+    horizontalPadding: isTablet ? 30 : 20,
+    verticalPadding: isTablet ? 25 : 15,
+    // Tailles d'éléments
+    cardWidth: isLargeScreen ? (width - 80) / 4 : isTablet ? (width - 70) / 3 : (width - 50) / 2,
+    headerHeight: isTablet ? 80 : 60,
+    bannerHeight: isTablet ? 200 : 180,
+    productImageHeight: isTablet ? 150 : 120,
+    categoryImageSize: isTablet ? 80 : 60,
+    // Tailles de police
+    titleFontSize: isTablet ? 22 : 18,
+    subtitleFontSize: isTablet ? 18 : 16,
+    bodyFontSize: isTablet ? 16 : 14,
+    captionFontSize: isTablet ? 14 : 12,
+    // Espacements
+    sectionSpacing: isTablet ? 35 : 25,
+    itemSpacing: isTablet ? 20 : 15,
+  };
+};
 const OrderValidationScreen = ({ navigation, route }) => {
   const { selectedItems = [] } = route.params || {};
-  const { isDarkMode } = useTheme();
+  
+  const { isDarkMode, toggleTheme } = useTheme();
+  const [showPrices, setShowPrices] = useState(true);
   const theme = isDarkMode ? darkTheme : lightTheme;
+    const responsive = getResponsiveDimensions();
+      const [menuVisible, setMenuVisible] = useState(false);
+
+const [cartItemsCount, setCartItemsCount] = useState(0);
+// État pour le flou de sécurité
+  const [isAppInBackground, setIsAppInBackground] = useState(false);
+
+  useEffect(() => {
+    // Empêcher les captures d'écran
+    const enableScreenshotProtection = async () => {
+      try {
+        await ScreenshotPrevent.enabled(true);
+        console.log('Protection contre les captures d\'écran activée');
+      } catch (error) {
+        console.warn('Erreur activation protection captures:', error);
+      }
+    };
+
+    // Désactiver la protection quand le composant est détruit
+    const disableScreenshotProtection = async () => {
+      try {
+        await ScreenshotPrevent.enabled(false);
+      } catch (error) {
+        console.warn('Erreur désactivation protection captures:', error);
+      }
+    };
+
+    enableScreenshotProtection();
+
+    // Écouter les changements d'état de l'app
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+
+    return () => {
+      disableScreenshotProtection();
+      subscription.remove();
+    };
+  }, []);
+
+  const handleAppStateChange = (nextAppState: string) => {
+    if (nextAppState === 'background' || nextAppState === 'inactive') {
+      // App passe en arrière-plan - activer le flou
+      setIsAppInBackground(true);
+    } else if (nextAppState === 'active') {
+      // App revient au premier plan - désactiver le flou
+      setIsAppInBackground(false);
+    }
+  };
+
+  useEffect(() => {
+  const loadCartItems = async () => {
+    try {
+      const localCart = await AsyncStorage.getItem('local_cart');
+      if (localCart) {
+        const cartItems = JSON.parse(localCart);
+        // Calculer le nombre total d'articles
+        const totalItems = cartItems.reduce((total, order) => {
+          return total + order.items.reduce((sum, item) => sum + item.quantity, 0);
+        }, 0);
+        setCartItemsCount(totalItems);
+      }
+    } catch (error) {
+      console.warn('Erreur lors du chargement du panier:', error);
+    }
+  };
+
+  loadCartItems();
+}, []);
+      
+  // const { cartItems, totalCartItems, saveCart } = useCart();
+  const { addedProduct } = route.params || {};
+  const [localCartItems, setLocalCartItems] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const allCartItems = [...localCartItems, ...orders];
+      const [token, setToken] = useState<string | null>(null);
+  
+  // const [localCartItems, setLocalCartItems] = useState<Order[]>([]);
+  // const allCartItems = [...localCartItems, ...orders];
+  
+  const { loadCart } = useCart();
+  const { cartItems, totalCartItems, saveCart } = useCart();
+
+
   
   // Calculer le total
   const total = selectedItems.reduce((sum, order) => sum + parseFloat(order.total_price), 0);
@@ -123,9 +251,35 @@ const OrderValidationScreen = ({ navigation, route }) => {
     );
   };
 
+  // Fonction pour gérer la navigation avec fermeture du menu
+  const handleNavigation = (screenName: string) => {
+    closeMenu();
+    navigation.navigate(screenName);
+  };
+
+  const closeMenu = () => {
+    if (menuVisible) {
+      setMenuVisible(false);
+    }
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <View style={[styles.header, { backgroundColor: '#F58320' }]}>
+      {isAppInBackground && Platform.OS === 'ios' && (
+              <BlurView
+                style={styles.securityBlur}
+                blurType="light"
+                blurAmount={25}
+                reducedTransparencyFallbackColor="white"
+              />
+            )}
+      
+            {isAppInBackground && Platform.OS === 'android' && (
+              <View style={styles.securityOverlay} />
+            )}
+      {/* Barre des tâches fixe en haut */}
+        
+      <View style={[styles.headerText, { backgroundColor: '#F58320' }]}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color="white" />
         </TouchableOpacity>
@@ -176,7 +330,7 @@ const OrderValidationScreen = ({ navigation, route }) => {
             onPress={() => navigation.navigate('PaymentScreen', { selectedItems, total })}
           >
             <Text style={styles.paymentButtonText}>Procéder au paiement</Text>
-            <Ionicons name="arrow-forward" size={20} color="white" style={styles.buttonIcon} />
+            {/* <Ionicons name="arrow-forward" size={20} color="white" style={styles.buttonIcon} /> */}
           </TouchableOpacity>
         </View>
       )}
@@ -188,7 +342,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
+  headerText: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -201,6 +355,43 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     zIndex: 10,
   },
+  
+  header: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 100,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    paddingBottom: 15,
+    // borderBottomLeftRadius: 20,
+    // borderBottomRightRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  profileContainer: { 
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  profileText: {
+    fontWeight: "bold",
+  },
+  
+  // Nouveau container pour les icônes avec espacement adaptatif
+  iconsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  
+  icon1Container: {
+    position: 'relative',
+  },
+
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
@@ -277,7 +468,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginLeft: 8,
   },
-  statusBadge: {
+  status1Badge: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 8,
@@ -393,10 +584,9 @@ const styles = StyleSheet.create({
   paymentButton: {
     backgroundColor: '#F58320',
     padding: 16,
+    marginBottom: 50,
     borderRadius: 8,
     alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
     elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -418,6 +608,111 @@ const styles = StyleSheet.create({
   pendingStatus: {
     backgroundColor: '#FFF8E1',
   },
+  
+  // Menu avec image de fond
+  menuOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    zIndex: 999,
+  },
+
+  menuDropdown: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    height: Dimensions.get('window').height,
+    width: 550,
+    zIndex: 1000,
+  },
+
+  menuHeader: {
+    padding: 20,
+    paddingTop: 50,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.2)',
+  },
+
+  menuHeaderTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#000000',
+    marginBottom: 5,
+  },
+
+  menuHeaderText: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginBottom: 3,
+  },
+
+  menuScrollContainer: {
+    paddingBottom: 30,
+  },
+
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    // borderBottomWidth: 1,
+    // borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+    // width: 50,
+  },
+
+  menuIcon: {
+    marginRight: 15,
+    width: 24,
+  },
+
+  menuItemText: {
+    fontSize: 16,
+    color: '#000000',
+    flex: 1,
+    fontWeight: '500',
+  },
+
+  menuSwitch: {
+    position: 'relative',
+    right: 300,
+    transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }]
+  },
+
+  messageBadge: {
+    position: 'relative',
+    right: 300,
+    backgroundColor: '#EF4444',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+
+  messageBadgeText: {
+    color: '#000000',
+    fontSize: 10,
+    fontWeight: '600',
+  },securityBlur: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1000,
+  },
+
+  securityOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    zIndex: 1000,
+  },
+  
 });
 
 export default OrderValidationScreen;

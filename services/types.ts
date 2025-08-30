@@ -4,6 +4,12 @@ export interface Brand {
 }
 
 
+export interface PaginatedCategoryResponse {
+  results: Category[];
+  count?: number;
+  next?: string | null;
+  previous?: string | null;
+}
 export interface OrderItem {
   product: Product;
   quantity: number;
@@ -13,7 +19,7 @@ export interface OrderItem {
 export interface Order {
   id: string;
   total_price: string;
-  status: string;
+  status: 'pending' | 'processing' | 'completed' | 'cancelled';
   created_at: string;
   items: OrderItem[];
 };
@@ -32,7 +38,7 @@ export interface CategoryParentInfo {
 }
 
 export interface Category {
-  id: number;
+  id: string;
   name: string;
   parent_info: CategoryParentInfo;
   subcategories_info: any[]; // Empty array in the data
@@ -56,7 +62,6 @@ interface PaginatedResponse<T> {
   previous: string | null;
   results: T[];
 }
-
 
 export interface Product {
   id: string;

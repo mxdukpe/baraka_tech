@@ -1,111 +1,118 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  FlatList, 
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
+  Image,
+  Dimensions,
+  SafeAreaView,
+  ActivityIndicator,
+  Alert,
   TextInput,
-  TouchableOpacity, 
-  Image, 
-  Alert, 
-  ActivityIndicator, 
-  ScrollView, 
-  Share,
-  Button,
-  Modal,
-  TouchableWithoutFeedback,
-  Dimensions
+  ScrollView,
+  Platform, AppState,
+  Modal
 } from 'react-native';
+import { widthPercentageToDP as wp, heightPercentageToDP as hp } from "react-native-responsive-screen";
+import ScreenshotPrevent from 'react-native-screenshot-prevent';
+import { BlurView } from '@react-native-community/blur';
+
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../appearence/ThemeContext';
-import { lightTheme, darkTheme } from '../styles/theme';
-import { getProducts, getProductsPage } from '../../services/apiService';
-import { Product, ProductImage } from '../../services/types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
+import { Product, ProductImage, CategoryParentInfo, Category, ProductResponse } from '../../services/types';
+import { getProducts, getProducts50Simple, getProductsPaginated  } from '../../services/apiService';
+import axios from 'axios';
+import { Asset } from 'expo-asset';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import * as Print from 'expo-print';
+import { useTheme } from '../appearence/ThemeContext';
+import { lightTheme, darkTheme } from '../styles/theme';
+import HeaderComponent from './HeaderComponent';
 
-// Fonction pour obtenir les dimensions responsives
-const getResponsiveDimensions = () => {
-  const { width, height } = Dimensions.get('window');
-  const isTablet = width >= 768;
-  const isLargeScreen = width >= 1024;
-  
-  return {
-    width,
-    height,
-    isTablet,
-    isLargeScreen,
-    isSmallScreen: width < 375,
-    // Colonnes adaptatives
-    productColumns: isLargeScreen ? 4 : isTablet ? 3 : 2,
-    categoryColumns: isLargeScreen ? 6 : isTablet ? 5 : 4,
-    // Padding adaptatif
-    horizontalPadding: isTablet ? 30 : 20,
-    verticalPadding: isTablet ? 25 : 15,
-    // Tailles d'éléments
-    cardWidth: isLargeScreen ? (width - 80) / 4 : isTablet ? (width - 70) / 3 : (width - 50) / 2,
-    headerHeight: isTablet ? 80 : 60,
-    bannerHeight: isTablet ? 200 : 180,
-    productImageHeight: isTablet ? 150 : 120,
-    categoryImageSize: isTablet ? 80 : 60,
-    // Tailles de police
-    titleFontSize: isTablet ? 22 : 18,
-    subtitleFontSize: isTablet ? 18 : 16,
-    bodyFontSize: isTablet ? 16 : 14,
-    captionFontSize: isTablet ? 14 : 12,
-    // Espacements
-    sectionSpacing: isTablet ? 35 : 25,
-    itemSpacing: isTablet ? 20 : 15,
-  };
-};
+const API_BASE_URL = 'https://backend.barakasn.com/api/v0/';
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
-interface OrderItem {
-  product: {
-    id: string;
-    name: string;
-    price?: string;
-    image?: string;  // Single image (if that's what your type expects)
-    images?: ProductImage[];  // Array of images (if you need multiple)
-    description?: string;
-    category?: any; // You might want to type this properly
-    prices?: any[]; // You might want to type this properly
-  };
-  quantity: number;
-  unit_price: string;
-}
-type Order = {
-  id: string;
-  total_price: string;
-  status: string;
-  created_at: string;
-  items: OrderItem[];
-};
-
-const { width } = Dimensions.get('window');
-
-type CategorieScreenProps = {
+interface CategoryScreenProps {
   navigation: any;
+}
+
+// Données de configuration pour les icônes
+const categoryIcons: { [key: string]: string } = {
+  'téléphone': 'phone-portrait-outline',
+  'smartphone': 'phone-portrait-outline',
+  'phone': 'phone-portrait-outline',
+  'ordinateur': 'laptop-outline',
+  'informatique': 'laptop-outline',
+  'montre': 'watch-outline',
+  'watch': 'watch-outline',
+  'mode': 'shirt-outline',
+  'vêtement': 'shirt-outline',
+  'appareil': 'camera-outline',
+  'photo': 'camera-outline',
+  'électronique': 'flash-outline',
+  'accessoire': 'headset-outline',
+  'bluetooth': 'bluetooth-outline',
+  'batterie': 'battery-half-outline',
+  'carte': 'card-outline',
+  'chargeur': 'battery-charging-outline',
+  'câble': 'git-branch-outline',
+  'coque': 'phone-portrait-outline',
+  'film': 'shield-outline',
+  'protecteur': 'shield-outline',
+  'video': 'videocam-outline',
+  'projecteur': 'videocam-outline',
+  'television': 'tv-outline',
+  'tv': 'tv-outline',
 };
 
-const CategorieScreen: React.FC<CategorieScreenProps> = ({ navigation }) => {
-  const [categories, setCategories] = useState<Array<{ id: string; name: string; productCount: number; image?: string }>>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+const getIconForCategory = (categoryName: string): keyof typeof Ionicons.glyphMap => {
+  const lowerName = categoryName.toLowerCase();
+  for (const [key, icon] of Object.entries(categoryIcons)) {
+    if (lowerName.includes(key)) {
+      return icon as keyof typeof Ionicons.glyphMap;
+    }
+  }
+  return 'grid-outline';
+};
+
+interface ParentCategory {
+  id: number;
+  name: string;
+  count: number;
+  hasProducts?: boolean;
+}
+
+interface CategoryWithSubcategories {
+  id: number;
+  name: string;
+  subcategories: Category[];
+}
+
+const CategoryScreen: React.FC<CategoryScreenProps> = ({ navigation }) => {
+  const [allCategories, setAllCategories] = useState<Category[]>([]);
+  const [parentsWithoutCategories, setParentsWithoutCategories] = useState<ParentCategory[]>([]);
+  const [categoriesWithSubcategories, setCategoriesWithSubcategories] = useState<CategoryWithSubcategories[]>([]);
+  const [selectedSubcategory, setSelectedSubcategory] = useState<Category | null>(null);
+  const [subcategoryProducts, setSubcategoryProducts] = useState<Product[]>([]);
+  
+  const [loading, setLoading] = useState({
+    categories: true,
+    products: false,
+  });
   const [error, setError] = useState<string | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [productQuantities, setProductQuantities] = useState<Record<string, number>>({});
-  const [isAddingToCart, setIsAddingToCart] = useState(false);
   const [token, setToken] = useState<string | null>(null);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [allProducts, setAllProducts] = useState<Product[]>([]);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalProducts, setTotalProducts] = useState(0);
-  const [loadingError, setLoadingError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'categories' | 'products'>('categories');
+  const [showPrices, setShowPrices] = useState(true);
+  
+  // Modal states
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalProducts, setModalProducts] = useState<Product[]>([]);
+  const [modalCategoryName, setModalCategoryName] = useState<string>('');
+  const [modalLoading, setModalLoading] = useState(false);
+  
+  // Share modal states
   const [shareModalVisible, setShareModalVisible] = useState(false);
   const [customPrice, setCustomPrice] = useState<string>('');
   const [shareWithPrice, setShareWithPrice] = useState(true);
@@ -114,811 +121,582 @@ const CategorieScreen: React.FC<CategorieScreenProps> = ({ navigation }) => {
   const [useCustomPrice, setUseCustomPrice] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
   const [product, setProduct] = useState<Product | null>(null);
-    const [quantity, setQuantity] = useState(1);
-
-  const { isDarkMode } = useTheme();
+  
+  const { isDarkMode, toggleTheme } = useTheme();
   const theme = isDarkMode ? darkTheme : lightTheme;
-  const responsive = getResponsiveDimensions();
+  // État pour le flou de sécurité
+  const [isAppInBackground, setIsAppInBackground] = useState(false);
 
   useEffect(() => {
-    const loadToken = async () => {
-      const storedToken = await AsyncStorage.getItem('access_token');
-      setToken(storedToken);
+    // Empêcher les captures d'écran
+    const enableScreenshotProtection = async () => {
+      try {
+        await ScreenshotPrevent.enabled(true);
+        console.log('Protection contre les captures d\'écran activée');
+      } catch (error) {
+        console.warn('Erreur activation protection captures:', error);
+      }
     };
-    loadToken();
+
+    // Désactiver la protection quand le composant est détruit
+    const disableScreenshotProtection = async () => {
+      try {
+        await ScreenshotPrevent.enabled(false);
+      } catch (error) {
+        console.warn('Erreur désactivation protection captures:', error);
+      }
+    };
+
+    enableScreenshotProtection();
+
+    // Écouter les changements d'état de l'app
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+
+    return () => {
+      disableScreenshotProtection();
+      subscription.remove();
+    };
   }, []);
 
-  useEffect(() => {
-    const fetchAllProducts = async () => {
-      console.log('Début du chargement des produits');
-      if (!token) {
-        console.log('Token non disponible');
-        return;
-      }
-
-      try {
-        setIsLoading(true);
-        setLoadingError(null);
-        
-        let currentPage = 1;
-        let hasMore = true;
-        const products: Product[] = [];
-        console.log('Initialisation chargement');
-
-        while (hasMore) {
-          try {
-            const response = await getProductsPage(token, currentPage);
-            
-            if (!response.results || response.results.length === 0) {
-              console.warn('Page vide reçue');
-              break;
-            }
-
-            products.push(...response.results);
-            hasMore = response.next !== null;
-            currentPage++;
-          } catch (error) {
-            console.error(`Erreur page ${currentPage}:`, error);
-            hasMore = false;
-            throw error;
-          }
-        }
-
-        console.log('Total produits:', products.length);
-        setAllProducts(products);
-        
-        // Créer les catégories avec le nombre de produits
-        const categoryMap = new Map();
-        products.forEach(product => {
-          const categoryName = product.category.name;
-          if (categoryMap.has(categoryName)) {
-            categoryMap.set(categoryName, {
-              ...categoryMap.get(categoryName),
-              productCount: categoryMap.get(categoryName).productCount + 1
-            });
-          } else {
-            categoryMap.set(categoryName, {
-              id: product.category.id || categoryName,
-              name: categoryName,
-              productCount: 1,
-              image: product.images?.[0]?.image // Utiliser la première image du premier produit comme image de catégorie
-            });
-          }
-        });
-        
-        setCategories(Array.from(categoryMap.values()));
-      } catch (error) {
-        console.error('Erreur globale:', error);
-        setLoadingError('Échec du chargement des produits');
-      } finally {
-        console.log('Chargement terminé');
-        setIsLoading(false);
-      }
-    };
-
-    fetchAllProducts();
-  }, [token]);
-
-  
-  const increaseQuantity = () => {
-    setQuantity(prev => prev + 1);
-  };
-
-  const decreaseQuantity = () => {
-    if (quantity > 1) {
-      setQuantity(prev => prev - 1);
+  const handleAppStateChange = (nextAppState: string) => {
+    if (nextAppState === 'background' || nextAppState === 'inactive') {
+      // App passe en arrière-plan - activer le flou
+      setIsAppInBackground(true);
+    } else if (nextAppState === 'active') {
+      // App revient au premier plan - désactiver le flou
+      setIsAppInBackground(false);
     }
   };
-  
-  const formatPrice = (price: string) => {
-    return parseInt(price).toLocaleString('fr-FR');
-  };
-  
-    const getImageUri = (imagePath: string | undefined) => {
-      if (!imagePath) return undefined;
-      
-      if (imagePath.startsWith('http')) {
-        return imagePath;
+
+  // Récupérer le token depuis AsyncStorage
+  useEffect(() => {
+    const getToken = async () => {
+      try {
+        const storedToken = await AsyncStorage.getItem('access_token');
+        setToken(storedToken);
+      } catch (err) {
+        console.error('Erreur lors de la récupération du token:', err);
       }
-      
-      if (imagePath.startsWith('/media/')) {
-        return `https://backend.barakasn.com${imagePath}`;
-      }
-      
-      if (imagePath.includes('product_iamges')) {
-        return `https://backend.barakasn.com/media/${imagePath}`;
-      }
-      
-      return `https://backend.barakasn.com/media/${imagePath}`;
     };
-  
-    // Fonction pour télécharger l'image localement
-    const downloadImageForSharing = async (imageUrl: string): Promise<string | null> => {
+    getToken();
+  }, []);
+
+  // Fonction pour vérifier si une catégorie a des produits
+  const categoryHasProducts = async (categoryId: string): Promise<boolean> => {
+    if (!token) return false;
+
     try {
-      const filename = `${product?.name?.replace(/[^a-zA-Z0-9]/g, '_') || 'product'}_${Date.now()}.jpg`;
-      const fileUri = `${FileSystem.cacheDirectory}${filename}`;
-      
-      const { uri } = await FileSystem.downloadAsync(imageUrl, fileUri, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+      const response = await axios.get(`${API_BASE_URL}products/products/?category=${categoryId}&limit=1`, {
+        headers: { Authorization: `Bearer ${token}` },
       });
       
-      return uri;
+      return response.data.results && response.data.results.length > 0;
     } catch (error) {
-      console.warn("Impossible de télécharger l'image pour le partage:", error);
-      return null;
+      return false;
     }
   };
-  
-    const generateShareMessage = () => {
-      if (!product) return '';
-      
-      let message = `🛍️ ${product.name}\n\n`;
-      
-      if (shareWithPrice) {
-        const priceToUse = useCustomPrice ? customPrice : (product.prices[0]?.price || '0');
-        message += `💰 Prix: ${formatPrice(priceToUse)} FCFA\n\n`;
-      }
-      
-      if (shareWithDescription && product.description) {
-        message += `📝 ${product.description}\n\n`;
-      }
-      
-      message += `📱 Contactez-nous pour plus d'informations !`;
-      
-      return message;
-    };
-  
-    const handleShare = async () => {
-    if (!product) return;
-  
-    setIsSharing(true);
-    
-    try {
-      const message = generateShareMessage();
-      
-      // Si l'utilisateur veut partager avec l'image
-      if (shareWithImage && product.images && product.images.length > 0) {
-        const imageUrl = getImageUri(product.images[0]?.image);
-        
-        if (imageUrl) {
-          console.log('Tentative de partage avec image:', imageUrl);
-          
-          // Télécharger l'image localement
-          const localImageUri = await downloadImageForSharing(imageUrl);
-          
-          if (localImageUri) {
-            console.log('Partage avec image locale:', localImageUri);
-            
-            // Solution pour iOS et Android
-            if (Platform.OS === 'ios') {
-              // Sur iOS, on peut partager texte et image ensemble
-              await Share.share({
-                message: message,
-                url: localImageUri,
-              });
-            } else {
-              // Sur Android, on partage d'abord le texte puis l'image
-              await Share.share({
-                message: message,
-              });
-              // Petite pause pour laisser le premier partage se terminer
-              await new Promise(resolve => setTimeout(resolve, 500));
-              await Sharing.shareAsync(localImageUri);
-            }
-          } else {
-            // Si le téléchargement échoue, partager seulement le texte
-            await Share.share({
-              title: product.name,
-              message: message,
-            });
-          }
-        } else {
-          // Pas d'image disponible, partager seulement le texte
-          await Share.share({
-            title: product.name,
-            message: message,
-          });
-        }
-      } else {
-        // Partager seulement le texte
-        await Share.share({
-          title: product.name,
-          message: message,
-        });
-      }
-      
-      setShareModalVisible(false);
-    } catch (error) {
-      console.error('Erreur lors du partage:', error);
-      Alert.alert('Erreur', 'Impossible de partager le produit. Veuillez réessayer.');
-    } finally {
-      setIsSharing(false);
-    }
-  };
-  
-  const handleQuickShare = async () => {
-    if (!product) return;
-  
-    try {
-      const message = `🛍️ ${product.name}\n\n💰 Prix: ${formatPrice(product.prices[0]?.price || '0')} FCFA\n\n${product.description ? `📝 ${product.description}\n\n` : ''}📱 Contactez-nous pour plus d'informations !`;
-      
-      // Inclure l'image si disponible
-      if (product.images && product.images.length > 0) {
-        const imageUrl = getImageUri(product.images[0]?.image);
-        if (imageUrl) {
-          const localImageUri = await downloadImageForSharing(imageUrl);
-          
-          if (localImageUri) {
-            if (Platform.OS === 'ios') {
-              await Share.share({
-                message: message,
-                url: localImageUri,
-              });
-            } else {
-              await Share.share({ message: message });
-              await new Promise(resolve => setTimeout(resolve, 500));
-              await Sharing.shareAsync(localImageUri);
-            }
-          } else {
-            await Share.share({
-              title: product.name,
-              message: message,
-            });
-          }
-        } else {
-          await Share.share({
-            title: product.name,
-            message: message,
-          });
-        }
-      } else {
-        await Share.share({
-          title: product.name,
-          message: message,
-        });
-      }
-    } catch (error) {
-      console.error('Erreur lors du partage rapide:', error);
-      Alert.alert('Erreur', 'Impossible de partager le produit.');
-    }
-  };
-  
-    const openShareModal = () => {
-      setShareModalVisible(true);
-    };
-  
-    const renderShareModal = () => {
-      if (!product) return null;
-      
-      const originalPrice = product.prices && product.prices.length > 0 
-        ? product.prices[0].price 
-        : '0';
-      
-      return (
-        <Modal
-          animationType="slide"
-          transparent={true}
-          visible={shareModalVisible}
-          onRequestClose={() => setShareModalVisible(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={[styles.modalContent, { backgroundColor: theme.background }]}>
-              <View style={styles.modalHeader}>
-                <Text style={[styles.modalTitle, { color: theme.text }]}>
-                  Partager le produit
-                </Text>
-                <TouchableOpacity onPress={() => setShareModalVisible(false)}>
-                  <Ionicons name="close" size={24} color={theme.text} />
-                </TouchableOpacity>
-              </View>
-  
-              <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
-                {/* Options de partage */}
-                <View style={styles.shareOptions}>
-                  <Text style={[styles.sectionTitle, { color: theme.text }]}>
-                    Éléments à inclure
-                  </Text>
-                  
-                  <TouchableOpacity 
-                    style={styles.optionRow}
-                    onPress={() => setShareWithPrice(!shareWithPrice)}
-                  >
-                    <Ionicons 
-                      name={shareWithPrice ? "checkbox" : "square-outline"} 
-                      size={20} 
-                      color="#F58320" 
-                    />
-                    <Text style={[styles.optionText, { color: theme.text }]}>
-                      Inclure le prix
-                    </Text>
-                  </TouchableOpacity>
-  
-                  <TouchableOpacity 
-                    style={styles.optionRow}
-                    onPress={() => setShareWithDescription(!shareWithDescription)}
-                  >
-                    <Ionicons 
-                      name={shareWithDescription ? "checkbox" : "square-outline"} 
-                      size={20} 
-                      color="#F58320" 
-                    />
-                    <Text style={[styles.optionText, { color: theme.text }]}>
-                      Inclure la description
-                    </Text>
-                  </TouchableOpacity>
-  
-                  <TouchableOpacity 
-                    style={styles.optionRow}
-                    onPress={() => setShareWithImage(!shareWithImage)}
-                  >
-                    <Ionicons 
-                      name={shareWithImage ? "checkbox" : "square-outline"} 
-                      size={20} 
-                      color="#F58320" 
-                    />
-                    <Text style={[styles.optionText, { color: theme.text }]}>
-                      Inclure l'image
-                    </Text>
-                  </TouchableOpacity>
-  
-                  {shareWithPrice && (
-                    <TouchableOpacity 
-                      style={[styles.optionRow, { marginLeft: 20 }]}
-                      onPress={() => setUseCustomPrice(!useCustomPrice)}
-                    >
-                      <Ionicons 
-                        name={useCustomPrice ? "checkbox" : "square-outline"} 
-                        size={20} 
-                        color="#F58320" 
-                      />
-                      <Text style={[styles.optionText, { color: theme.text }]}>
-                        Utiliser un prix personnalisé
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-  
-                {/* Prix personnalisé */}
-                {shareWithPrice && useCustomPrice && (
-                  <View style={styles.customPriceSection}>
-                    <Text style={[styles.sectionTitle, { color: theme.text }]}>
-                      Prix personnalisé
-                    </Text>
-                    <View style={styles.priceInputContainer}>
-                      <TextInput
-                        style={[styles.customPriceInput, { 
-                          color: theme.text, 
-                          borderColor: theme.text + '40',
-                          backgroundColor: theme.background 
-                        }]}
-                        value={customPrice}
-                        onChangeText={setCustomPrice}
-                        placeholder="Entrez le prix"
-                        keyboardType="numeric"
-                        placeholderTextColor={theme.text + '60'}
-                      />
-                      <Text style={[styles.currencyLabel, { color: theme.text }]}>FCFA</Text>
-                    </View>
-                  </View>
-                )}
-  
-                {/* Aperçu du produit */}
-                <View style={styles.productPreview}>
-                  <Text style={[styles.sectionTitle, { color: theme.text }]}>
-                    Aperçu du produit
-                  </Text>
-                  <View style={[styles.productPreviewCard, { 
-                    backgroundColor: theme.background, 
-                    borderColor: theme.text + '20' 
-                  }]}>
-                    {shareWithImage && product.images && product.images.length > 0 && (
-                      <Image 
-                        source={{ uri: getImageUri(product.images[0]?.image) }}
-                        style={styles.previewImage}
-                        defaultSource={require('../../assets/images/baraka_icon.png')}
-                      />
-                    )}
-                    <View style={styles.productPreviewInfo}>
-                      <Text style={[styles.previewProductName, { color: theme.text }]}>
-                        {product.name}
-                      </Text>
-                      {shareWithPrice && (
-                        <Text style={[styles.previewPrice, { color: '#F58320' }]}>
-                          {formatPrice(useCustomPrice ? customPrice : originalPrice)} FCFA
-                        </Text>
-                      )}
-                    </View>
-                  </View>
-                </View>
-  
-                {/* Aperçu du message */}
-                <View style={styles.previewSection}>
-                  <Text style={[styles.sectionTitle, { color: theme.text }]}>
-                    Message à partager
-                  </Text>
-                  <View style={[styles.previewBox, { 
-                    backgroundColor: theme.background, 
-                    borderColor: theme.text + '20' 
-                  }]}>
-                    <Text style={[styles.previewText, { color: theme.text }]}>
-                      {generateShareMessage()}
-                    </Text>
-                  </View>
-                </View>
-              </ScrollView>
-  
-              <View style={styles.modalFooter}>
-                <TouchableOpacity 
-                  style={[styles.cancelButton, { borderColor: theme.text + '40' }]}
-                  onPress={() => setShareModalVisible(false)}
-                >
-                  <Text style={[styles.cancelButtonText, { color: theme.text }]}>
-                    Annuler
-                  </Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={[styles.shareModalButton, { opacity: isSharing ? 0.7 : 1 }]}
-                  onPress={handleShare}
-                  disabled={isSharing}
-                >
-                  {isSharing ? (
-                    <ActivityIndicator size="small" color="white" />
-                  ) : (
-                    <Ionicons name="share" size={20} color="white" />
-                  )}
-                  <Text style={styles.shareModalButtonText}>
-                    {isSharing ? 'Partage...' : 'Partager'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
-      );
-    };
 
+  // Fonction pour récupérer toutes les pages de catégories
+  const fetchAllCategoriesPages = async (token: string, page: number = 1, accumulatedCategories: Category[] = []): Promise<Category[]> => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}products/categories/?page=${page}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = response.data;
+      const newCategories = [...accumulatedCategories, ...(data.results || [])];
+
+      if (data.next) {
+        return await fetchAllCategoriesPages(token, page + 1, newCategories);
+      }
+
+      return newCategories;
+    } catch (error) {
+      console.error(`Erreur lors du chargement de la page ${page}:`, error);
+      return accumulatedCategories;
+    }
+  };
+
+  // Récupérer les produits pour une catégorie spécifique
+  const fetchProductsForCategory = async (categoryId: string, limit: number = 50): Promise<Product[]> => {
+    if (!token) return [];
+
+    try {
+      let response = await axios.get(`${API_BASE_URL}products/products/?category=${categoryId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!response.data.results || response.data.results.length === 0) {
+        const selectedCat = allCategories.find(cat => cat.id === categoryId);
+        if (selectedCat) {
+          response = await axios.get(`${API_BASE_URL}products/products/?category_name=${selectedCat.name}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+        }
+      }
+
+      if (!response.data.results || response.data.results.length === 0) {
+        response = await axios.get(`${API_BASE_URL}products/products/`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        
+        const selectedCat = allCategories.find(cat => cat.id === categoryId);
+        if (selectedCat && response.data.results) {
+          const filteredProducts = response.data.results.filter((product: any) => {
+            return product.category === selectedCat.name || 
+                   product.category?.toLowerCase() === selectedCat.name.toLowerCase() ||
+                   (product.category_info && product.category_info.name === selectedCat.name);
+          });
+          return filteredProducts.slice(0, limit);
+        }
+      }
+
+      return (response.data.results || []).slice(0, limit);
+    } catch (err: any) {
+      console.error('Erreur fetchProducts:', err);
+      return [];
+    }
+  };
+
+  // Récupérer toutes les catégories et créer la nouvelle structure
+  const fetchAllCategories = async () => {
+    if (!token) return;
+
+    try {
+      setLoading(prev => ({ ...prev, categories: true }));
+      setError(null);
+
+      const allCategoriesData = await fetchAllCategoriesPages(token);
+      setAllCategories(allCategoriesData);
+      
+      // Séparer les catégories parent
+      const parentMap = new Map<number, { name: string; count: number; hasChildren: boolean }>();
+      
+      // Compter les enfants pour chaque parent
+      allCategoriesData.forEach(category => {
+        if (category.parent_info) {
+          const parentId = category.parent_info.id;
+          const parentName = category.parent_info.name;
+          
+          if (parentMap.has(parentId)) {
+            parentMap.get(parentId)!.count++;
+            parentMap.get(parentId)!.hasChildren = true;
+          } else {
+            parentMap.set(parentId, { name: parentName, count: 1, hasChildren: true });
+          }
+        }
+      });
+
+      // Ajouter les parents qui n'ont pas d'enfants (catégories sans sous-catégories)
+      const allParentIds = new Set(Array.from(parentMap.keys()));
+      
+      // Vérifier tous les parents possibles
+      const uniqueParents = allCategoriesData.reduce((acc, category) => {
+        if (category.parent_info && !acc.some(p => p.id === category.parent_info.id)) {
+          acc.push({
+            id: category.parent_info.id,
+            name: category.parent_info.name
+          });
+        }
+        return acc;
+      }, [] as Array<{id: number, name: string}>);
+
+      // Identifier les parents sans enfants
+      const parentsWithoutChildren: ParentCategory[] = [];
+      const parentsWithChildren: ParentCategory[] = [];
+
+      uniqueParents.forEach(parent => {
+        if (parentMap.has(parent.id)) {
+          parentsWithChildren.push({
+            id: parent.id,
+            name: parent.name,
+            count: parentMap.get(parent.id)!.count
+          });
+        } else {
+          parentsWithoutChildren.push({
+            id: parent.id,
+            name: parent.name,
+            count: 0
+          });
+        }
+      });
+
+      setParentsWithoutCategories(parentsWithoutChildren);
+
+      // Créer les catégories avec leurs sous-catégories (SANS vérifier les produits)
+      const categoriesWithSubs: CategoryWithSubcategories[] = [];
+      
+      for (const parent of parentsWithChildren) {
+        const subcategories = allCategoriesData.filter(cat => 
+          cat.parent_info && cat.parent_info.id === parent.id
+        );
+
+        // Afficher toutes les catégories qui ont des sous-catégories
+        if (subcategories.length > 0) {
+          categoriesWithSubs.push({
+            id: parent.id,
+            name: parent.name,
+            subcategories: subcategories
+          });
+        }
+      }
+
+      setCategoriesWithSubcategories(categoriesWithSubs);
+
+    } catch (err: any) {
+      setError(err.message);
+      console.error('Erreur lors de la récupération des catégories:', err);
+
+      if (err.response?.status === 401) {
+        Alert.alert(
+          'Session expirée',
+          'Veuillez vous reconnecter',
+          [{ text: 'OK', onPress: () => navigation.navigate('Login') }]
+        );
+      }
+    } finally {
+      setLoading(prev => ({ ...prev, categories: false }));
+    }
+  };
+
+  // Gestion de la sélection d'une sous-catégorie
+  const handleSubcategorySelect = async (subcategory: Category) => {
+    setSelectedSubcategory(subcategory);
+    setLoading(prev => ({ ...prev, products: true }));
+    
+    const products = await fetchProductsForCategory(subcategory.id);
+    setSubcategoryProducts(products);
+    
+    setLoading(prev => ({ ...prev, products: false }));
+  };
+
+  useEffect(() => {
+    if (token) {
+      fetchAllCategories();
+    }
+  }, [token]);
+
+  const getImageUri = (imagePath: string | undefined) => {
+    if (!imagePath) return undefined;
+    
+    if (imagePath.startsWith('http')) {
+      return imagePath;
+    }
+    
+    if (imagePath.startsWith('/media/')) {
+      return `https://backend.barakasn.com${imagePath}`;
+    }
+    
+    if (imagePath.includes('product_iamges')) {
+      return `https://backend.barakasn.com/media/${imagePath}`;
+    }
+    
+    return `https://backend.barakasn.com/media/${imagePath}`;
+  };
 
   const getPriceByCriterion = (product: Product) => {
     return product.prices[0];
   };
 
-  const updateQuantity = (productId: string, increment: boolean) => {
-    setProductQuantities(prev => {
-      const currentQty = prev[productId] || 0;
-      const newQty = Math.max(0, currentQty + (increment ? 1 : -1));
-      return { ...prev, [productId]: newQty };
-    });
+  const formatPrice = (price: string) => {
+    return parseInt(price).toLocaleString('fr-FR');
   };
 
-  const addToCart = async (product: Product) => {
-  if (!token) {
-    Alert.alert('Connexion requise', 'Veuillez vous connecter');
-    navigation.navigate('Login');
-    return;
-  }
-  
-  // Vérification supplémentaire pour les prix
-  if (!product.prices || product.prices.length === 0) {
-    Alert.alert('Erreur', 'Prix du produit non disponible');
-    return;
-  }
-
-  setIsAddingToCart(true);
-  
-  try {
-    // Récupération sécurisée du prix
-    const productPrice = product.prices[0]?.price || '0';
-    const currentQuantity = productQuantities[product.id] || 1;
+  // Fonction pour créer un message de partage unifié
+  const generateUnifiedShareMessage = () => {
+    if (!product) return '';
     
-    // Créer l'objet Order complet
-    const cartItem: Order = {
-      id: `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      total_price: (parseFloat(productPrice) * currentQuantity).toString(),
-      status: 'pending',
-      created_at: new Date().toISOString(),
-      items: [{
-        product: {
-          id: product.id.toString(),
-          name: product.name,
-          price: productPrice,
-          images: product.images || [],
-          description: product.description || '',
-          category: product.category || null,
-          prices: product.prices || []
-        },
-        quantity: currentQuantity,
-        unit_price: productPrice
-      }]
-    };
-
-    // Sauvegarder dans le stockage local
-    try {
-      const existingCart = await AsyncStorage.getItem('local_cart');
-      const cartItems = existingCart ? JSON.parse(existingCart) : [];
-      
-      const existingItemIndex = cartItems.findIndex((item: Order) => 
-        item.items.some(orderItem => orderItem.product.id === product.id.toString())
-      );
-      
-      if (existingItemIndex !== -1) {
-        cartItems[existingItemIndex].items[0].quantity += currentQuantity;
-        cartItems[existingItemIndex].total_price = (
-          parseFloat(cartItems[existingItemIndex].items[0].unit_price) * 
-          cartItems[existingItemIndex].items[0].quantity
-        ).toString();
-      } else {
-        cartItems.push(cartItem);
-      }
-      
-      await AsyncStorage.setItem('local_cart', JSON.stringify(cartItems));
-    } catch (storageError) {
-      console.warn('Erreur de stockage local:', storageError);
+    let message = `🛍️ *${product.name}*\n`;
+    message += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+    
+    if (shareWithPrice) {
+      const priceToUse = useCustomPrice ? customPrice : (product.prices[0]?.price || '0');
+      message += `💰 *Prix:* ${formatPrice(priceToUse)} FCFA\n\n`;
     }
-
-    navigation.navigate('CartTab', { 
-      screen: 'CartScreen',
-      params: { addedProduct: cartItem }
-    });
     
-    Alert.alert('Succès', 'Produit ajouté au panier');
-    
-  } catch (error) {
-    const errorMessage = (error instanceof Error && error.message) ? error.message : "Erreur lors de l'ajout au panier";
-    Alert.alert('Erreur', errorMessage);
-  } finally {
-    setIsAddingToCart(false);
-  }
-};
-
-  const handleShareProduct = async (product: Product) => {
-    try {
-      await Share.share({
-        message: `Découvrez ce produit: ${product.name} - ${formatPrice(product.prices[0]?.price)} FCFA\n\nDisponible sur l'application Barakasn`,
-        title: `Partager ${product.name}`
-      });
-    } catch (error) {
-      console.error('Erreur lors du partage:', error);
+    if (shareWithDescription && product.description) {
+      message += `📝 *Description:*\n${product.description}\n\n`;
     }
+    
+    message += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    message += `📱 *Contactez-nous pour plus d'informations !*\n`;
+    message += `🛒 *Commandez maintenant !*`;
+    
+    return message;
   };
 
-  const handleCategoryPress = (categoryName: string) => {
-    setSelectedCategory(categoryName);
-    setViewMode('products');
-    const categoryProducts = allProducts.filter(product => product.category.name === categoryName);
-    setProducts(categoryProducts);
+  const openShareModal = (productToShare: Product) => {
+    setProduct(productToShare);
+    setShareModalVisible(true);
   };
 
-  const handleBackToCategories = () => {
-    setViewMode('categories');
-    setSelectedCategory(null);
-    setSearchQuery('');
-  };
-
-  const filteredProducts = products.filter((product) => {
-    const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesSearch;
-  });
-    const [showPrices, setShowPrices] = useState(true);
-  
-
-  const renderCategory = ({ item }: { item: { id: string; name: string; productCount: number; image?: string } }) => {
+  // Rendu des éléments de liste
+  const renderSidebarParent = ({ item }: { item: ParentCategory }) => {
     return (
-      <TouchableOpacity
-        style={[styles.categoryCard, { backgroundColor: theme.background }]}
-        onPress={() => handleCategoryPress(item.name)}
-        activeOpacity={0.7}
-      >
-        <View style={styles.categoryImageContainer}>
-         
-            <View style={[styles.categoryImagePlaceholder, { backgroundColor: '#F58320' }]}>
-              <Ionicons name="grid" size={40} color="white" />
-            </View>
+      <View style={styles.sidebarItem}>
+        <Text style={styles.sidebarText} numberOfLines={2}>
+          {item.name}
+        </Text>
+      </View>
+    );
+  };
 
-          <View style={styles.categoryOverlay}>
-            <Text style={styles.categoryProductCount}>{item.productCount}</Text>
-          </View>
-        </View>
+  const renderCategoryWithSubs = ({ item: categoryGroup }: { item: CategoryWithSubcategories }) => {
+    return (
+      <View style={styles.categorySection}>
+        <Text style={styles.categorySectionTitle}>{categoryGroup.name}</Text>
         
-        <View style={styles.categoryInfo}>
-          <Text style={[styles.categoryName, { color: theme.text }]} numberOfLines={2}>
-            {item.name}
-          </Text>
-          <Text style={[styles.categoryProductText, { color: '#F58320' }]}>
-            {item.productCount} produit{item.productCount !== 1 ? 's' : ''}
-          </Text>
+        <View style={styles.subcategoriesGrid}>
+          {categoryGroup.subcategories.map((subcategory) => (
+            <TouchableOpacity
+              key={subcategory.id}
+              style={[
+                styles.subcategoryCard,
+                selectedSubcategory?.id === subcategory.id && styles.subcategoryCardSelected
+              ]}
+              onPress={() => handleSubcategorySelect(subcategory)}
+            >
+              <Ionicons 
+                name={getIconForCategory(subcategory.name) as any} 
+                size={24} 
+                color={selectedSubcategory?.id === subcategory.id ? '#fff' : '#F58320'} 
+              />
+              <Text style={[
+                styles.subcategoryName,
+                selectedSubcategory?.id === subcategory.id && styles.subcategoryNameSelected
+              ]} numberOfLines={2}>
+                {subcategory.name}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
-        
-        <View style={styles.categoryArrow}>
-          <Ionicons name="chevron-forward" size={20} color="#F58320" />
-        </View>
-      </TouchableOpacity>
+      </View>
     );
   };
 
   const renderProduct = ({ item }: { item: Product }) => {
-    const quantity = productQuantities[item.id] || 0;
-    const stockStatus = item.stock === 0;
     const productImage = item.images?.[0]?.image;
     const productPrice = getPriceByCriterion(item);
-
+    const stockStatus = item.stock === 0;
+    
     return (
       <TouchableOpacity
-        style={[styles.productCard, 
-          { 
-            backgroundColor: theme.background,
-            width: responsive.cardWidth,
-            margin: responsive.itemSpacing / 4,
-            shadowColor: theme.background,
-            elevation: 3
-          }]}
-        onPress={() => navigation.navigate('ProductDetailScreen', { productId: item.id })}
+        style={styles.productCard}
+        onPress={() => {
+          navigation.navigate('ProductDetailScreen', { productId: item.id });
+        }}
       >
         <View style={styles.productImageContainer}>
           {productImage ? (
             <Image
-              source={{ uri: `https://backend.barakasn.com${productImage}` }} // Ajoutez votre URL de base ici
-              style={[styles.productImage,
-              { height: responsive.productImageHeight }]}
+              source={{ uri: getImageUri(productImage) }}
+              style={styles.productImage}
               resizeMode="cover"
             />
           ) : (
             <Image
               source={require('../../assets/images/baraka_icon.png')}
-              style={[styles.productImage,
-              { height: responsive.productImageHeight }]}
-              resizeMode="cover"
+              style={styles.productImage}
+              resizeMode="contain"
             />
           )}
-          
-          <TouchableOpacity 
-            style={styles.shareButton}
-            onPress={openShareModal}
-          >
-            <Ionicons name="share-social" size={20} color="#F58320" />
-          </TouchableOpacity>
-
-          <View style={[
-            styles.stockIndicator,
-            { 
-              backgroundColor: stockStatus ? '#FF3B30' : '#34C759',
-            }
-          ]}>
-            <Text style={styles.stockText}>
-              {stockStatus ? 'RUPTURE' : 'EN STOCK'}
-            </Text>
-          </View>
-        </View> 
-
-        <View style={[styles.productInfo]}>
-          <Text style={[styles.productName, 
-            { 
-              color: theme.text,
-              fontSize: responsive.bodyFontSize
-            }]} numberOfLines={2}>
+        </View>
+        
+        <View style={styles.productInfo}>
+          <Text style={styles.productName} numberOfLines={2}>
             {item.name}
           </Text>
-          <Text style={[styles.productCategory, 
-            { 
-              color: theme.text,
-              fontSize: responsive.captionFontSize
-            }]}>
-            {item.category.name}
-          </Text>
-          <Text style={[styles.productCategoryParent, 
-            { 
-              color: '#F58320',
-              fontSize: responsive.captionFontSize
-            }]}>
-            {item.category.parent_info.name} - {item.brand?.name || 'Marque non spécifiée'}
-          </Text>
-          <Text style={[
-            styles.productPrice, 
-            { 
-              color: '#F58320',
-              fontSize: responsive.bodyFontSize,
-              fontWeight: 'bold',
-            }
-          ]}>
-            {showPrices 
-              ? productPrice ? `${formatPrice(productPrice.price)} FCFA` : 'Prix non disponible'
-              : ' '}
-          </Text>
-        </View>
-
-        <View style={styles.quantityControls}>
-          <TouchableOpacity 
-            onPress={(e) => {
-              e.stopPropagation();
-              updateQuantity(item.id, false);
-            }}
-            disabled={quantity <= 0}
-          >
-            <Ionicons 
-              name="remove-circle" 
-              size={24} 
-              color={quantity > 0 ? '#F58320' : '#ccc'} 
-            />
-          </TouchableOpacity>
-
-          <Text style={[styles.quantityText, { color: theme.text }]}>
-            {quantity}
-          </Text>
-
-          <TouchableOpacity 
-            onPress={(e) => {
-              e.stopPropagation();
-              updateQuantity(item.id, true);
-            }}
-          >
-            <Ionicons name="add-circle" size={24} color="#F58320" />
-          </TouchableOpacity>
-        </View>
-
-        <TouchableOpacity
-          style={[
-            styles.addButton, 
-            { 
-              backgroundColor: quantity > 0 ? '#F58320' : '#ccc',
-              opacity: quantity > 0 ? 1 : 0.6
-            }
-          ]}
-          onPress={() => addToCart(item)}
-          disabled={isAddingToCart || quantity <= 0}
-        >
-          {isAddingToCart ? (
-            <ActivityIndicator size="small" color="white" />
-          ) : (
-            <Text style={styles.addButtonText}>
-              {quantity > 0 ? `Ajouter (${quantity})` : 'Ajouter'}
+          
+          {showPrices && (
+            <Text style={styles.productPrice}>
+              {productPrice ? `${formatPrice(productPrice.price)} FCFA` : 'Prix N/A'}
             </Text>
           )}
-        </TouchableOpacity>
+          
+          <View style={[
+            styles.stockIndicator,
+            { backgroundColor: stockStatus ? '#FF3B30' : '#34C759' }
+          ]}>
+            <Text style={styles.stockText}>
+              {stockStatus ? 'RUPTURE' : 'STOCK'}
+            </Text>
+          </View>
+        </View>
       </TouchableOpacity>
     );
   };
-  
-  if (isLoading) {
+
+  const renderShareModal = () => {
+    if (!product) return null;
+    
     return (
-      <View style={[styles.loadingContainer, { backgroundColor: theme.background }]}>
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={shareModalVisible}
+        onRequestClose={() => setShareModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.background }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>
+                Partager le produit
+              </Text>
+              <TouchableOpacity onPress={() => setShareModalVisible(false)}>
+                <Ionicons name="close" size={24} color={theme.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+              {/* Options de partage */}
+              <View style={styles.shareOptions}>
+                <Text style={[styles.sectionTitle, { color: theme.text }]}>
+                  Éléments à inclure
+                </Text>
+                
+                <TouchableOpacity 
+                  style={styles.optionRow}
+                  onPress={() => setShareWithPrice(!shareWithPrice)}
+                >
+                  <Ionicons 
+                    name={shareWithPrice ? "checkbox" : "square-outline"} 
+                    size={20} 
+                    color="#F58320" 
+                  />
+                  <Text style={[styles.optionText, { color: theme.text }]}>
+                    Inclure le prix
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.optionRow}
+                  onPress={() => setShareWithDescription(!shareWithDescription)}
+                >
+                  <Ionicons 
+                    name={shareWithDescription ? "checkbox" : "square-outline"} 
+                    size={20} 
+                    color="#F58320" 
+                  />
+                  <Text style={[styles.optionText, { color: theme.text }]}>
+                    Inclure la description
+                  </Text>
+                </TouchableOpacity>
+
+                {shareWithPrice && (
+                  <TouchableOpacity 
+                    style={[styles.optionRow, { marginLeft: 20 }]}
+                    onPress={() => setUseCustomPrice(!useCustomPrice)}
+                  >
+                    <Ionicons 
+                      name={useCustomPrice ? "checkbox" : "square-outline"} 
+                      size={20} 
+                      color="#F58320" 
+                    />
+                    <Text style={[styles.optionText, { color: theme.text }]}>
+                      Utiliser un prix personnalisé
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* Prix personnalisé */}
+              {shareWithPrice && useCustomPrice && (
+                <View style={styles.customPriceSection}>
+                  <Text style={[styles.sectionTitle, { color: theme.text }]}>
+                    Prix personnalisé
+                  </Text>
+                  <View style={styles.priceInputContainer}>
+                    <TextInput
+                      style={[styles.customPriceInput, { 
+                        color: theme.text, 
+                        borderColor: theme.text + '40',
+                        backgroundColor: theme.background 
+                      }]}
+                      value={customPrice}
+                      onChangeText={setCustomPrice}
+                      placeholder="Entrez le prix"
+                      keyboardType="numeric"
+                      placeholderTextColor={theme.text + '60'}
+                    />
+                    <Text style={[styles.currencyLabel, { color: theme.text }]}>FCFA</Text>
+                  </View>
+                </View>
+              )}
+
+              {/* Aperçu du message */}
+              <View style={styles.previewSection}>
+                <Text style={[styles.sectionTitle, { color: theme.text }]}>
+                  Aperçu du message
+                </Text>
+                <View style={[styles.previewBox, { 
+                  backgroundColor: theme.background, 
+                  borderColor: theme.text + '20' 
+                }]}>
+                  <Text style={[styles.previewText, { color: theme.text }]}>
+                    {generateUnifiedShareMessage()}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Aperçu de l'image */}
+              {shareWithImage && product.images && product.images.length > 0 && (
+                <View style={styles.imagePreviewSection}>
+                  <Text style={[styles.sectionTitle, { color: theme.text }]}>
+                    Image à partager
+                  </Text>
+                  <Image 
+                    source={{ uri: getImageUri(product.images[0]?.image) }}
+                    style={styles.sharePreviewImage}
+                    defaultSource={require('../../assets/images/baraka_icon.png')}
+                  />
+                </View>
+              )}
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity 
+                style={[styles.cancelButton, { borderColor: theme.text + '40' }]}
+                onPress={() => setShareModalVisible(false)}
+              >
+                <Text style={[styles.cancelButtonText, { color: theme.text }]}>
+                  Annuler
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
+  if (!token) {
+    return (
+      <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#F58320" />
-        <Text style={[styles.loadingText, { color: theme.text }]}>
-          Chargement des catégories...
-        </Text>
+        <Text style={styles.loadingText}>Chargement des informations d'authentification...</Text>
       </View>
     );
   }
 
-  if (loadingError) {
+  if (loading.categories) {
     return (
-      <View style={[styles.errorContainer, { backgroundColor: theme.background }]}>
-        <Ionicons name="alert-circle" size={64} color="#FF3B30" />
-        <Text style={[styles.errorText, { color: theme.text }]}>{loadingError}</Text>
-        <TouchableOpacity 
-          style={styles.retryButton}
-          onPress={() => {
-            setLoadingError(null);
-            setIsLoading(true);
-          }}
-        >
-          <Text style={styles.retryButtonText}>Réessayer</Text>
-        </TouchableOpacity>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#F58320" />
+        <Text style={styles.loadingText}>Chargement des catégories...</Text>
       </View>
     );
   }
 
   if (error) {
     return (
-      <View style={[styles.errorContainer, { backgroundColor: theme.background }]}>
-        <Text style={[styles.errorText, { color: theme.text }]}>{error}</Text>
+      <View style={styles.errorContainer}>
+        <Ionicons name="warning-outline" size={48} color="#FF3B30" />
+        <Text style={styles.errorText}>{error}</Text>
         <TouchableOpacity 
-          style={[styles.retryButton, { backgroundColor: '#F58320' }]}
-          onPress={() => {
-            setError(null);
-            setIsLoading(true);
-          }}
+          style={styles.retryButton}
+          onPress={() => fetchAllCategories()}
         >
           <Text style={styles.retryButtonText}>Réessayer</Text>
         </TouchableOpacity>
@@ -927,223 +705,509 @@ const CategorieScreen: React.FC<CategorieScreenProps> = ({ navigation }) => {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <View style={[styles.header,
-          { 
-            height: responsive.headerHeight,
-            paddingHorizontal: responsive.horizontalPadding
-          }]}>
-        <TouchableOpacity 
-          onPress={viewMode === 'categories' ? () => navigation.goBack() : handleBackToCategories}
-        >
-          <Ionicons name="arrow-back" size={24} color="#F58320" />
-        </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: theme.text }]}>
-          {viewMode === 'categories' ? 'Nos Catégories' : selectedCategory}
-        </Text>
-      </View>
+    <SafeAreaView style={styles.container}>
+      {isAppInBackground && Platform.OS === 'ios' && (
+              <BlurView
+                style={styles.securityBlur}
+                blurType="light"
+                blurAmount={25}
+                reducedTransparencyFallbackColor="white"
+              />
+            )}
+      
+            {isAppInBackground && Platform.OS === 'android' && (
+              <View style={styles.securityOverlay} />
+            )}
+      {/* Header */}
+      <HeaderComponent 
+        navigation={navigation}
+        title="Nos Catégories"
+      />
 
-      {viewMode === 'products' && (
-        <>
-        {/* Nouveau bouton */}
-        <TouchableWithoutFeedback onPress={() => setShowPrices(!showPrices)}>
-          <View 
-          style={styles.togglePricesButton}>
-            <Ionicons 
-              name={showPrices ? 'eye-off' : 'eye'} 
-              size={24} 
-              color="#F58320" 
-            />
-            {/* <Text style={[styles.menuText, {color: theme.header.text}]}>
-              {showPrices ? "Masquer les prix" : "Afficher les prix"}
-            </Text> */}
-          </View>
-        </TouchableWithoutFeedback>
-        <TextInput
-          style={[
-            styles.searchInput, 
-            { 
-              backgroundColor: theme.background,
-              color: theme.text,
-              borderColor: theme.header?.background || '#F58320'
-            }
-          ]}
-          placeholder="Rechercher un produit..."
-          placeholderTextColor={theme.text}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-        </>
-      )}
-
-      {viewMode === 'categories' ? (
-        <>
-          <Text style={[styles.subtitle, { color: theme.text }]}>
-            Découvrez nos {categories.length} catégories de produits
-          </Text>
-          
-          <FlatList
-            key="categories"
-            data={categories}
-            renderItem={renderCategory}
-            keyExtractor={(item) => item.id.toString()}
-            contentContainerStyle={styles.categoriesList}
-            showsVerticalScrollIndicator={false}
-            ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <Ionicons name="grid-outline" size={64} color="#ccc" />
-                <Text style={[styles.emptyText, { color: theme.text }]}>
-                  Aucune catégorie disponible
-                </Text>
-              </View>
-            }
-          />
-        </>
-      ) : (
-        <>
-          <Text style={[styles.resultsCount, { color: theme.text }]}>
-            {filteredProducts.length} produit{filteredProducts.length !== 1 ? 's' : ''} dans {selectedCategory}
-          </Text>
-
-          <FlatList
-            key={viewMode}
-            data={filteredProducts}
-            renderItem={renderProduct}
-            keyExtractor={(item) => item.id.toString()}
-            numColumns={responsive.isTablet ? 3 : 2} // Ici on adapte le nombre de colonnes
-            columnWrapperStyle={styles.productRow}
-            contentContainerStyle={styles.productList}
-            showsVerticalScrollIndicator={false}
-            ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <Ionicons name="search-outline" size={64} color="#ccc" />
-                <Text style={[styles.emptyText, { color: theme.text }]}>
-                  Aucun produit trouvé
-                </Text>
-              </View>
-            }
-          />
-        </>
-      )}
+      {/* Render du modal de partage */}
       {renderShareModal()}
-    </View>
+
+      {/* Contenu principal */}
+      <View style={styles.mainContent}>
+        {/* Sidebar - Parents sans catégories */}
+        <View style={styles.sidebar}>
+          <Text style={styles.sidebarTitle}>Catégories</Text>
+          <FlatList
+            data={parentsWithoutCategories}
+            renderItem={renderSidebarParent}
+            keyExtractor={item => item.id.toString()}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.sidebarContent}
+            ListEmptyComponent={
+              <Text style={styles.emptySidebarText}>Aucune catégorie</Text>
+            }
+          />
+        </View>
+
+        {/* Zone de contenu principal */}
+        <View style={styles.contentArea}>
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {/* Section des catégories avec sous-catégories */}
+            <View style={styles.categoriesSection}>
+              <FlatList
+                data={categoriesWithSubcategories}
+                renderItem={renderCategoryWithSubs}
+                keyExtractor={item => item.id.toString()}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.categoryList}
+                ListEmptyComponent={
+                  <View style={styles.emptyContainer}>
+                    <Ionicons name="folder-open-outline" size={64} color="#ccc" />
+                    <Text style={styles.emptyText}>Aucune catégorie avec produits disponible</Text>
+                  </View>
+                }
+              />
+            </View>
+
+            {/* Section des produits de la sous-catégorie sélectionnée */}
+            {selectedSubcategory && (
+              <View style={styles.productsSection}>
+                <View style={styles.productsSectionHeader}>
+                  <Text style={styles.productsSectionTitle}>
+                    Produits - {selectedSubcategory.name}
+                  </Text>
+                </View>
+
+                {loading.products ? (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#F58320" />
+                    <Text style={styles.loadingText}>Chargement des produits...</Text>
+                  </View>
+                ) : (
+                  <FlatList
+                    data={subcategoryProducts}
+                    renderItem={renderProduct}
+                    keyExtractor={item => item.id.toString()}
+                    numColumns={2}
+                    columnWrapperStyle={styles.productRow}
+                    contentContainerStyle={styles.productsList}
+                    showsVerticalScrollIndicator={false}
+                    ListEmptyComponent={
+                      <View style={styles.emptyContainer}>
+                        <Ionicons name="cube-outline" size={64} color="#ccc" />
+                        <Text style={styles.emptyText}>Aucun produit disponible dans cette sous-catégorie</Text>
+                      </View>
+                    }
+                  />
+                )}
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
-    paddingVertical: 50,
+    backgroundColor: '#f8f9fa',
+  },
+  
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#f8f9fa',
+  },
+  
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+  },
+  
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#f8f9fa',
+  },
+  
+  errorText: {
+    fontSize: 16,
+    marginVertical: 16,
+    color: '#FF3B30',
+    textAlign: 'center',
+  },
+  
+  retryButton: {
+    backgroundColor: '#F58320',
+    padding: 12,
+    borderRadius: 8,
+    minWidth: 120,
+  },
+  
+  retryButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
 
-  productList: {
-    paddingBottom: 16,
-    alignItems: 'center', // Pour centrer les cartes sur les grands écrans
+  // Layout principal
+  mainContent: {
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: '#fff',
   },
-  productRow: {
-    justifyContent: 'space-between',
-    marginBottom: 12,
+
+  // Sidebar - Parents sans catégories
+  sidebar: {
+  width: wp("28%"), // au lieu de width: 120
+  backgroundColor: '#f8f9fa',
+  borderRightWidth: 1,
+  borderRightColor: '#e9ecef',
+  paddingTop: hp("2%"),
+},
+sidebarTitle: {
+  fontSize: hp("1.6%"), // taille relative
+  fontWeight: 'bold',
+  color: '#333',
+  textAlign: 'center',
+  marginBottom: hp("1.5%"),
+  paddingHorizontal: wp("2%"),
+},
+  
+  sidebarContent: {
+    padding: 8,
   },
-  productCard: {
-    borderRadius: 10,
-    padding: 12,
+  
+  sidebarItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    marginVertical: 2,
+    borderRadius: 6,
+    backgroundColor: '#e9ecef',
+    alignItems: 'center',
+  },
+  
+  sidebarText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 13,
+  },
+  
+  emptySidebarText: {
+    fontSize: 11,
+    color: '#999',
+    textAlign: 'center',
+    fontStyle: 'italic',
+    paddingVertical: 20,
+  },
+
+  // Zone de contenu
+  contentArea: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  
+  categoriesSection: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
+  
+  categoryList: {
+    paddingBottom: 20,
+  },
+
+  // Section catégorie avec sous-catégories
+  categorySection: {
+    marginBottom: 24,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 2,
-    marginBottom: 50,
+    elevation: 3,
+  },
+  
+  categorySectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 16,
   },
 
+  subcategoryCard: {
+  width: wp("28%"), // au lieu de (screenWidth - 80) / 3
+  backgroundColor: '#f8f9fa',
+  borderRadius: 10,
+  padding: hp("1.5%"),
+  marginBottom: hp("1.5%"),
+  alignItems: 'center',
+  borderWidth: 1,
+  borderColor: '#e9ecef',
+},
+subcategoryName: {
+  fontSize: hp("1.5%"),
+  fontWeight: '600',
+  color: '#333',
+  textAlign: 'center',
+  marginTop: hp("1%"),
+  lineHeight: hp("2%"),
+},
+
   
-  currencyLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  productPreview: {
-    marginBottom: 20,
-  },
-  productPreviewCard: {
+  subcategoriesGrid: {
     flexDirection: 'row',
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: 'center',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
   },
-  previewImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-    marginRight: 12,
+  
+  // subcategoryCard: {
+  //   width: (screenWidth - 80) / 3,
+  //   backgroundColor: '#f8f9fa',
+  //   borderRadius: 10,
+  //   padding: 12,
+  //   marginBottom: 12,
+  //   alignItems: 'center',
+  //   borderWidth: 1,
+  //   borderColor: '#e9ecef',
+  // },
+  
+  subcategoryCardSelected: {
+    backgroundColor: '#F58320',
+    borderColor: '#F58320',
   },
-  productPreviewInfo: {
+  
+  // subcategoryName: {
+  //   fontSize: 12,
+  //   fontWeight: '600',
+  //   color: '#333',
+  //   textAlign: 'center',
+  //   marginTop: 8,
+  //   lineHeight: 14,
+  // },
+  
+  subcategoryNameSelected: {
+    color: '#fff',
+  },
+
+  // Section des produits
+  productsSection: {
+    paddingHorizontal: 16,
+    paddingBottom: 20,
+  },
+  
+  productsSectionHeader: {
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e9ecef',
+  },
+  
+  productsSectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  
+  productsList: {
+    paddingBottom: 20,
+  },
+  
+  productRow: {
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+
+  productCard: {
+  flex: 1,
+  backgroundColor: '#fff',
+  borderRadius: 12,
+  padding: hp("1.5%"),
+  marginHorizontal: wp("1%"),
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.1,
+  shadowRadius: 4,
+  elevation: 3,
+  maxWidth: wp("46%"), // au lieu de (screenWidth - 48) / 2
+},
+productImageContainer: {
+  height: hp("20%"), // responsive au lieu de 140
+  borderRadius: 8,
+  overflow: 'hidden',
+  marginBottom: hp("1%"),
+  position: 'relative',
+},
+productName: {
+  fontSize: hp("1.8%"),
+  fontWeight: '600',
+  color: '#333',
+  marginBottom: hp("0.8%"),
+  lineHeight: hp("2%"),
+},
+productPrice: {
+  fontSize: hp("1.7%"),
+  color: '#F58320',
+  fontWeight: 'bold',
+  marginBottom: hp("1%"),
+},
+stockText: {
+  fontSize: hp("1.2%"),
+  color: '#fff',
+  fontWeight: 'bold',
+},
+
+  
+  // productCard: {
+  //   flex: 1,
+  //   backgroundColor: '#fff',
+  //   borderRadius: 12,
+  //   padding: 12,
+  //   marginHorizontal: 6,
+  //   shadowColor: '#000',
+  //   shadowOffset: { width: 0, height: 2 },
+  //   shadowOpacity: 0.1,
+  //   shadowRadius: 4,
+  //   elevation: 3,
+  //   maxWidth: (screenWidth - 48) / 2,
+  // },
+  
+  // productImageContainer: {
+  //   height: 140,
+  //   borderRadius: 8,
+  //   overflow: 'hidden',
+  //   marginBottom: 8,
+  //   position: 'relative',
+  // },
+  
+  productImage: {
+    width: '100%',
+    height: '100%',
+  },
+  
+  productInfo: {
     flex: 1,
   },
-  previewProductName: {
+  
+  // productName: {
+  //   fontSize: 14,
+  //   fontWeight: '600',
+  //   color: '#333',
+  //   marginBottom: 6,
+  //   lineHeight: 16,
+  // },
+  
+  // productPrice: {
+  //   fontSize: 13,
+  //   color: '#F58320',
+  //   fontWeight: 'bold',
+  //   marginBottom: 8,
+  // },
+  
+  stockIndicator: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  
+  // stockText: {
+  //   fontSize: 10,
+  //   color: '#fff',
+  //   fontWeight: 'bold',
+  // },
+
+  // États vides
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 30,
+  },
+  
+  emptyText: {
     fontSize: 16,
+    color: '#6c757d',
+    marginTop: 16,
+    textAlign: 'center',
     fontWeight: '600',
-    marginBottom: 4,
   },
-  previewPrice: {
-    fontSize: 14,
-    fontWeight: 'bold',
+
+  // Styles pour les modals de partage
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  previewSection: {
-    marginBottom: 20,
+  
+  modalContent: {
+    width: '90%',
+    maxHeight: '85%',
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
   },
-  previewBox: {
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
-  },
-  previewText: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  modalFooter: {
+  
+  modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 20,
-  },
-  cancelButton: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingVertical: 12,
     alignItems: 'center',
-    marginRight: 10,
+    marginBottom: 20,
   },
-  cancelButtonText: {
-    fontSize: 16,
+  
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  
+  modalBody: {
+    maxHeight: '75%',
+  },
+  
+  shareOptions: {
+    marginBottom: 20,
+  },
+  
+  sectionTitle: {
+    fontSize: 18,
     fontWeight: '600',
+    marginBottom: 12,
   },
-  shareModalButton: {
-    flex: 1,
-    backgroundColor: '#F58320',
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+  
+  optionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 10,
-    minHeight: 50,
+    paddingVertical: 10,
   },
-  shareModalButtonText: {
-    color: 'white',
+  
+  optionText: {
     fontSize: 16,
-    fontWeight: 'bold',
-    marginLeft: 8,
+    marginLeft: 10,
   },
   
   customPriceSection: {
     marginBottom: 20,
   },
+  
   priceInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
   },
+  
   customPriceInput: {
     flex: 1,
     borderWidth: 1,
@@ -1154,328 +1218,75 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   
-
-  togglePricesButton: {
-    marginLeft: 'auto',
-    padding: 8,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 16,
+  currencyLabel: {
     fontSize: 16,
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  errorText: {
-    fontSize: 16,
-    marginVertical: 20,
-    textAlign: 'center',
-  },
-  retryButton: {
-    backgroundColor: '#F58320',
-    padding: 12,
-    borderRadius: 8,
-    minWidth: 120,
-    alignItems: 'center',
-  },
-  retryButtonText: {
-    color: 'white',
-    fontWeight: 'bold',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginLeft: 12,
-    flex: 1,
-  },
-  subtitle: {
-    fontSize: 14,
-    marginBottom: 20,
-    opacity: 0.7,
-  },
-  searchInput: {
-    height: 48,
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    fontSize: 16,
+    fontWeight: '600',
   },
   
-  // Styles pour les images
-  imagePlaceholder: {
-    backgroundColor: '#f0f0f0',
-    justifyContent: 'center',
-    alignItems: 'center',
+  previewSection: {
+    marginBottom: 20,
   },
-  imageLoadingContainer: {
+  
+  previewBox: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+  },
+  
+  previewText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  
+  imagePreviewSection: {
+    marginBottom: 20,
+  },
+  
+  sharePreviewImage: {
+    width: '100%',
+    height: 200,
+    borderRadius: 8,
+    resizeMode: 'cover',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  
+  modalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
+  },
+  
+  cancelButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },securityBlur: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f0f0f0',
-    zIndex: 1,
-  },
-  
-  // Styles pour les catégories
-  categoriesList: {
-    paddingBottom: 20,
-  },
-  categoryCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    marginBottom: 12,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  categoryImageContainer: {
-    position: 'relative',
-    marginRight: 16,
-  },
-  categoryImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-  },
-  categoryImagePlaceholder: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  categoryOverlay: {
-    position: 'absolute',
-    top: -5,
-    right: -5,
-    backgroundColor: '#F58320',
-    borderRadius: 12,
-    minWidth: 24,
-    height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  categoryProductCount: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  categoryInfo: {
-    flex: 1,
-  },
-  categoryName: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  categoryProductText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  categoryArrow: {
-    marginLeft: 8,
-  },
-  
-  // Styles pour les produits
-  resultsCount: {
-    fontSize: 14,
-    marginBottom: 12,
-    fontWeight: '500',
-  },
-  productImageContainer: {
-    position: 'relative',
-    marginBottom: 8,
-  },
-  productImage: {
-    width: '100%',
-    height: 120,
-    borderRadius: 8,
-  },
-  productInfo: {
-    marginBottom: 8,
-  },
-  productName: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  productCategory: {
-    fontSize: 12,
-    marginBottom: 4,
-  },
-  productCategoryParent: {
-    fontSize: 12,
-    marginBottom: 4,
-    color: '#F58320',
-  },
-  productPrice: {
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  quantityControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
-  quantityText: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginHorizontal: 12,
-  },
-  addButton: {
-    borderRadius: 6,
-    padding: 8,
-    alignItems: 'center',
-  },
-  addButtonText: {
-    color: 'white',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  stockIndicator: {
-    position: 'absolute',
-    top: 8,
-    left: 8,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  stockText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: 'white',
-  },
-  
-  // Styles pour les états vides
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 60,
-  },
-  emptyText: {
-    fontSize: 16,
-    marginTop: 16,
-    textAlign: 'center',
+    zIndex: 1000,
   },
 
-  
-
-
-  // Styles pour la modal
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    width: '90%',
-    maxHeight: '80%',
-    borderRadius: 20,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  modalBody: {
-    maxHeight: '70%',
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 10,
-  },
-  shareOptions: {
-    marginBottom: 20,
-  },
-  optionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-  },
-  optionText: {
-    fontSize: 16,
-    marginLeft: 10,
-  },
-  selectedProductsList: {
-    marginBottom: 20,
-  },
-  selectedProductItem: {
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
-    borderWidth: 1,
-  },
-  selectedProductInfo: {
-    marginBottom: 8,
-  },
-  selectedProductName: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  originalPrice: {
-    fontSize: 12,
-  },
-  priceInput: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  shareButton: {
-    backgroundColor: '#FFFFFF',
-    padding: 10,
-    borderRadius: 25,
-    width: 40,
+  securityOverlay: {
     position: 'absolute',
-    right: 10,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-  },
-  
-  shareButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginLeft: 8,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    zIndex: 1000,
   },
 });
 
-export default CategorieScreen;
+export default CategoryScreen;

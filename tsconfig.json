@@ -1,19 +1,18 @@
 {
   "compilerOptions": {
-    /* Configuration de base */
     "target": "esnext",
     "module": "Node16",
-    "lib": ["esnext", "dom"],
+    "lib": [
+      "esnext",
+      "dom"
+    ],
     "jsx": "react-native",
     "incremental": true,
-    
-    /* Configuration des imports */
     "esModuleInterop": true,
+    "typeRoots": ["./node_modules/@types", "./src/types"],
     "allowSyntheticDefaultImports": true,
     "moduleResolution": "node16",
     "resolveJsonModule": true,
-    
-    /* Configuration du typage */
     "strict": true,
     "noImplicitAny": true,
     "strictNullChecks": true,
@@ -28,26 +27,36 @@
     "noUnusedParameters": true,
     "noImplicitReturns": true,
     "skipLibCheck": false,
-    
-    /* Configuration des chemins */
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"],
-      "@components/*": ["./src/components/*"],
-      "@assets/*": ["./assets/*"],
-      "@navigation/*": ["./src/navigation/*"],
-      "@utils/*": ["./src/utils/*"],
-      "@hooks/*": ["./src/hooks/*"],
-      "@services/*": ["./src/services/*"],
-      "@types/*": ["./src/types/*"]
+      "@/*": [
+        "./src/*"
+      ],
+      "@components/*": [
+        "./src/components/*"
+      ],
+      "@assets/*": [
+        "./assets/*"
+      ],
+      "@navigation/*": [
+        "./src/navigation/*"
+      ],
+      "@utils/*": [
+        "./src/utils/*"
+      ],
+      "@hooks/*": [
+        "./src/hooks/*"
+      ],
+      "@services/*": [
+        "./src/services/*"
+      ],
+      "@types/*": [
+        "./src/types/*"
+      ]
     },
-    
-    /* Configuration de la sortie */
     "outDir": "./dist",
     "removeComments": true,
     "noEmit": true,
-    
-    /* Configuration React */
     "jsxFactory": "React.createElement",
     "jsxFragmentFactory": "Fragment"
   },
@@ -69,11 +78,11 @@
     "src/**/*.d.ts",
     "src/**/*.tsx",
     "App.tsx",
-    "index.js",
-    ".expo/types/**/*.ts",
-    "expo-env.d.ts",
+    "index.js","src/**/*", "assets/**/*",
     "global.d.ts",
-    "**/*.d.ts"
+    "**/*.d.ts",
+    "src",
+    "declarations.d.ts"
   ],
   "extends": "expo/tsconfig.base"
 }

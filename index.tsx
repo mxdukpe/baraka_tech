@@ -17,7 +17,6 @@ import { AuthProvider } from './context/AuthContext'; // Importez le AuthProvide
  */
 export default function Index() {
   return (
-    // <CartProvider>
       <SafeAreaProvider>
         <AuthProvider>
           <NavigationContainer>
@@ -25,6 +24,5 @@ export default function Index() {
           </NavigationContainer>
         </AuthProvider>
       </SafeAreaProvider>
-    // </CartProvider>
   );
 }
