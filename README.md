@@ -1,3 +1,7 @@
+<p align="center">
+  <img src=".github/banner.png" alt="Baraka Electronique — app mobile de catalogue et commande d'électronique" width="100%">
+</p>
+
 # GreenHabit 🌱
 
 **GreenHabit** est une application mobile conçue pour aider les utilisateurs à adopter de nouvelles habitudes plus respectueuses de l'environnement. Développée lors d'un hackathon de 36 heures, cette application propose des fonctionnalités innovantes pour sensibiliser et encourager les utilisateurs à réduire leur impact écologique au quotidien.
